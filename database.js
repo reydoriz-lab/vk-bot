@@ -1,474 +1,390 @@
-const sqlite3 = require('sqlite3').verbose();
-const path = require('path');
+const { Pool } = require('pg');
 
-const db = new sqlite3.Database('./bot.db');
-
-// Инициализация всех таблиц
-db.serialize(() => {
-    db.run(`CREATE TABLE IF NOT EXISTS users (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        vk_id INTEGER UNIQUE,
-        name TEXT,
-        is_banned INTEGER DEFAULT 0,
-        registered_at DATETIME DEFAULT CURRENT_TIMESTAMP
-    )`);
-    
-    db.run(`CREATE TABLE IF NOT EXISTS profiles (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        user_id INTEGER,
-        type TEXT CHECK(type IN ('public', 'anon')),
-        gender TEXT CHECK(gender IN ('male', 'female')),
-        search_gender TEXT CHECK(search_gender IN ('male', 'female', 'all')),
-        name TEXT,
-        age INTEGER,
-        city TEXT,
-        photo TEXT,
-        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-        FOREIGN KEY(user_id) REFERENCES users(id)
-    )`);
-    
-    db.run(`CREATE TABLE IF NOT EXISTS likes (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        from_user_id INTEGER,
-        to_profile_id INTEGER,
-        type TEXT CHECK(type IN ('public', 'anon')),
-        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-        UNIQUE(from_user_id, to_profile_id),
-        FOREIGN KEY(from_user_id) REFERENCES users(id),
-        FOREIGN KEY(to_profile_id) REFERENCES profiles(id)
-    )`);
-    
-    db.run(`CREATE TABLE IF NOT EXISTS matches (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        user1_id INTEGER,
-        user2_id INTEGER,
-        type TEXT CHECK(type IN ('public', 'anon')),
-        chat_id INTEGER,
-        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-        FOREIGN KEY(user1_id) REFERENCES users(id),
-        FOREIGN KEY(user2_id) REFERENCES users(id)
-    )`);
-    
-    db.run(`CREATE TABLE IF NOT EXISTS chats (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        match_id INTEGER,
-        is_active INTEGER DEFAULT 1,
-        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-        closed_at DATETIME,
-        FOREIGN KEY(match_id) REFERENCES matches(id)
-    )`);
-    
-    db.run(`CREATE TABLE IF NOT EXISTS chat_messages (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        chat_id INTEGER,
-        from_user_id INTEGER,
-        message TEXT,
-        attachment TEXT,
-        sent_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-        FOREIGN KEY(chat_id) REFERENCES chats(id),
-        FOREIGN KEY(from_user_id) REFERENCES users(id)
-    )`);
-    
-    db.run(`CREATE TABLE IF NOT EXISTS admin_logs (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        admin_id INTEGER,
-        action TEXT,
-        target_id INTEGER,
-        details TEXT,
-        created_at DATETIME DEFAULT CURRENT_TIMESTAMP
-    )`);
-    
-    db.run(`CREATE TABLE IF NOT EXISTS user_logs (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        user_id INTEGER,
-        action TEXT,
-        details TEXT,
-        created_at DATETIME DEFAULT CURRENT_TIMESTAMP
-    )`);
-    
-    console.log('✅ База данных инициализирована');
+const pool = new Pool({
+    connectionString: process.env.DATABASE_URL,
+    ssl: { rejectUnauthorized: false }
 });
 
+// Инициализация всех таблиц
+async function initTables() {
+    const client = await pool.connect();
+    try {
+        await client.query(`
+            CREATE TABLE IF NOT EXISTS users (
+                id SERIAL PRIMARY KEY,
+                vk_id BIGINT UNIQUE,
+                name TEXT,
+                is_banned INTEGER DEFAULT 0,
+                registered_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        `);
+        
+        await client.query(`
+            CREATE TABLE IF NOT EXISTS profiles (
+                id SERIAL PRIMARY KEY,
+                user_id INTEGER REFERENCES users(id),
+                type TEXT CHECK(type IN ('public', 'anon')),
+                gender TEXT CHECK(gender IN ('male', 'female')),
+                search_gender TEXT CHECK(search_gender IN ('male', 'female', 'all')),
+                name TEXT,
+                age INTEGER,
+                city TEXT,
+                photo TEXT,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        `);
+        
+        await client.query(`
+            CREATE TABLE IF NOT EXISTS likes (
+                id SERIAL PRIMARY KEY,
+                from_user_id INTEGER REFERENCES users(id),
+                to_profile_id INTEGER REFERENCES profiles(id),
+                type TEXT CHECK(type IN ('public', 'anon')),
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                UNIQUE(from_user_id, to_profile_id)
+            )
+        `);
+        
+        await client.query(`
+            CREATE TABLE IF NOT EXISTS matches (
+                id SERIAL PRIMARY KEY,
+                user1_id INTEGER REFERENCES users(id),
+                user2_id INTEGER REFERENCES users(id),
+                type TEXT CHECK(type IN ('public', 'anon')),
+                chat_id INTEGER,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        `);
+        
+        await client.query(`
+            CREATE TABLE IF NOT EXISTS chats (
+                id SERIAL PRIMARY KEY,
+                match_id INTEGER REFERENCES matches(id),
+                is_active INTEGER DEFAULT 1,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                closed_at TIMESTAMP
+            )
+        `);
+        
+        await client.query(`
+            CREATE TABLE IF NOT EXISTS chat_messages (
+                id SERIAL PRIMARY KEY,
+                chat_id INTEGER REFERENCES chats(id),
+                from_user_id INTEGER REFERENCES users(id),
+                message TEXT,
+                attachment TEXT,
+                sent_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        `);
+        
+        await client.query(`
+            CREATE TABLE IF NOT EXISTS admin_logs (
+                id SERIAL PRIMARY KEY,
+                admin_id INTEGER,
+                action TEXT,
+                target_id INTEGER,
+                details TEXT,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        `);
+        
+        await client.query(`
+            CREATE TABLE IF NOT EXISTS user_logs (
+                id SERIAL PRIMARY KEY,
+                user_id INTEGER,
+                action TEXT,
+                details TEXT,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        `);
+        
+        console.log('✅ База данных PostgreSQL инициализирована');
+    } finally {
+        client.release();
+    }
+}
+
+initTables().catch(console.error);
+
 module.exports = {
-    addUser: (vk_id, name) => {
-        return new Promise((resolve, reject) => {
-            db.run(`INSERT OR IGNORE INTO users (vk_id, name) VALUES (?, ?)`, [vk_id, name], function(err) {
-                if (err) reject(err);
-                resolve(this.lastID);
-            });
-        });
+    addUser: async (vk_id, name) => {
+        const result = await pool.query(
+            `INSERT INTO users (vk_id, name) VALUES ($1, $2) ON CONFLICT (vk_id) DO NOTHING RETURNING id`,
+            [vk_id, name]
+        );
+        if (result.rows[0]) return result.rows[0].id;
+        const user = await module.exports.getUserByVkId(vk_id);
+        return user ? user.id : null;
     },
     
-    getUserByVkId: (vk_id) => {
-        return new Promise((resolve, reject) => {
-            db.get(`SELECT * FROM users WHERE vk_id = ?`, [vk_id], (err, row) => {
-                if (err) reject(err);
-                resolve(row);
-            });
-        });
+    getUserByVkId: async (vk_id) => {
+        const result = await pool.query(`SELECT * FROM users WHERE vk_id = $1`, [vk_id]);
+        return result.rows[0];
     },
     
-    getUserById: (id) => {
-        return new Promise((resolve, reject) => {
-            db.get(`SELECT * FROM users WHERE id = ?`, [id], (err, row) => {
-                if (err) reject(err);
-                resolve(row);
-            });
-        });
+    getUserById: async (id) => {
+        const result = await pool.query(`SELECT * FROM users WHERE id = $1`, [id]);
+        return result.rows[0];
     },
     
-    createProfile: (userId, type, gender, searchGender, name, age, city, photo) => {
-        return new Promise((resolve, reject) => {
-            db.run(`INSERT INTO profiles (user_id, type, gender, search_gender, name, age, city, photo) 
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-                [userId, type, gender, searchGender, name, age, city, photo],
-                function(err) {
-                    if (err) reject(err);
-                    resolve(this.lastID);
-                });
-        });
+    createProfile: async (userId, type, gender, searchGender, name, age, city, photo) => {
+        const result = await pool.query(
+            `INSERT INTO profiles (user_id, type, gender, search_gender, name, age, city, photo) 
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING id`,
+            [userId, type, gender, searchGender, name, age, city, photo]
+        );
+        return result.rows[0].id;
     },
     
-    getProfileByUserIdAndType: (userId, type) => {
-        return new Promise((resolve, reject) => {
-            db.get(`SELECT * FROM profiles WHERE user_id = ? AND type = ?`, [userId, type], (err, row) => {
-                if (err) reject(err);
-                resolve(row);
-            });
-        });
+    getProfileByUserIdAndType: async (userId, type) => {
+        const result = await pool.query(
+            `SELECT * FROM profiles WHERE user_id = $1 AND type = $2`,
+            [userId, type]
+        );
+        return result.rows[0];
     },
     
-    deleteProfile: (profileId) => {
-        return new Promise((resolve, reject) => {
-            db.run(`DELETE FROM profiles WHERE id = ?`, [profileId], (err) => {
-                if (err) reject(err);
-                resolve();
-            });
-        });
+    deleteProfile: async (profileId) => {
+        await pool.query(`DELETE FROM profiles WHERE id = $1`, [profileId]);
     },
     
-    getProfilesForSearch: (currentUserId, currentProfile, age) => {
+    getProfilesForSearch: async (currentUserId, currentProfile, age) => {
         const minAge = 18;
         const maxAge = 100;
         let searchGenderCondition = '';
+        const params = [currentUserId, currentProfile.type, minAge, maxAge];
         
         if (currentProfile.search_gender === 'male') {
-            searchGenderCondition = "AND p.gender = 'male'";
+            searchGenderCondition = `AND p.gender = 'male'`;
         } else if (currentProfile.search_gender === 'female') {
-            searchGenderCondition = "AND p.gender = 'female'";
-        } else {
-            searchGenderCondition = "";
+            searchGenderCondition = `AND p.gender = 'female'`;
         }
         
-        return new Promise((resolve, reject) => {
-            db.all(`
-                SELECT p.*, u.vk_id 
-                FROM profiles p
-                JOIN users u ON p.user_id = u.id
-                WHERE p.user_id != ? 
-                    AND p.type = ? 
-                    AND p.age BETWEEN ? AND ?
-                    ${searchGenderCondition}
-                    AND u.is_banned = 0
-                ORDER BY RANDOM()
-            `, [currentUserId, currentProfile.type, minAge, maxAge], (err, rows) => {
-                if (err) {
-                    console.error('Ошибка getProfilesForSearch:', err);
-                    reject(err);
-                } else {
-                    resolve(rows || []);
-                }
-            });
-        });
+        const query = `
+            SELECT p.*, u.vk_id 
+            FROM profiles p
+            JOIN users u ON p.user_id = u.id
+            WHERE p.user_id != $1 
+                AND p.type = $2 
+                AND p.age BETWEEN $3 AND $4
+                ${searchGenderCondition}
+                AND u.is_banned = 0
+            ORDER BY RANDOM()
+        `;
+        
+        const result = await pool.query(query, params);
+        return result.rows || [];
     },
     
-    getProfilesForSearchByCity: (currentUserId, currentProfile, age, userCity) => {
+    getProfilesForSearchByCity: async (currentUserId, currentProfile, age, userCity) => {
         const minAge = 18;
         const maxAge = 100;
         let searchGenderCondition = '';
+        const params = [userCity, currentUserId, currentProfile.type, minAge, maxAge];
         
         if (currentProfile.search_gender === 'male') {
-            searchGenderCondition = "AND p.gender = 'male'";
+            searchGenderCondition = `AND p.gender = 'male'`;
         } else if (currentProfile.search_gender === 'female') {
-            searchGenderCondition = "AND p.gender = 'female'";
-        } else {
-            searchGenderCondition = "";
+            searchGenderCondition = `AND p.gender = 'female'`;
         }
         
-        return new Promise((resolve, reject) => {
-            db.all(`
-                SELECT p.*, u.vk_id,
-                       CASE WHEN p.city = ? THEN 1 ELSE 0 END as city_match
-                FROM profiles p
-                JOIN users u ON p.user_id = u.id
-                WHERE p.user_id != ? 
-                    AND p.type = ? 
-                    AND p.age BETWEEN ? AND ?
-                    ${searchGenderCondition}
-                    AND u.is_banned = 0
-                ORDER BY city_match DESC, RANDOM()
-            `, [userCity, currentUserId, currentProfile.type, minAge, maxAge], (err, rows) => {
-                if (err) {
-                    console.error('Ошибка getProfilesForSearchByCity:', err);
-                    reject(err);
-                } else {
-                    console.log(`Найдено анкет: ${rows ? rows.length : 0}`);
-                    resolve(rows || []);
-                }
-            });
-        });
+        const query = `
+            SELECT p.*, u.vk_id,
+                   CASE WHEN p.city = $1 THEN 1 ELSE 0 END as city_match
+            FROM profiles p
+            JOIN users u ON p.user_id = u.id
+            WHERE p.user_id != $2 
+                AND p.type = $3 
+                AND p.age BETWEEN $4 AND $5
+                ${searchGenderCondition}
+                AND u.is_banned = 0
+            ORDER BY city_match DESC, RANDOM()
+        `;
+        
+        const result = await pool.query(query, params);
+        return result.rows || [];
     },
     
-    addLike: (fromUserId, toProfileId, type) => {
-        return new Promise((resolve, reject) => {
-            db.run(`INSERT OR IGNORE INTO likes (from_user_id, to_profile_id, type) VALUES (?, ?, ?)`,
-                [fromUserId, toProfileId, type],
-                function(err) {
-                    if (err) reject(err);
-                    resolve(this.changes > 0);
-                });
-        });
-    },
-    
-    checkLikeDirect: (fromUserId, toProfileId, type) => {
-        return new Promise((resolve, reject) => {
-            db.get(
-                `SELECT * FROM likes WHERE from_user_id = ? AND to_profile_id = ? AND type = ?`,
-                [fromUserId, toProfileId, type],
-                (err, row) => {
-                    if (err) reject(err);
-                    resolve(row);
-                }
+    addLike: async (fromUserId, toProfileId, type) => {
+        try {
+            await pool.query(
+                `INSERT INTO likes (from_user_id, to_profile_id, type) VALUES ($1, $2, $3)`,
+                [fromUserId, toProfileId, type]
             );
-        });
+            return true;
+        } catch (err) {
+            return false;
+        }
     },
     
-    checkMutualLike: (userId, otherUserProfileId, type) => {
-        return new Promise((resolve, reject) => {
-            db.get(`SELECT user_id FROM profiles WHERE id = ?`, [otherUserProfileId], (err, profile) => {
-                if (err) {
-                    reject(err);
-                    return;
-                }
-                if (!profile) {
-                    resolve(null);
-                    return;
-                }
-                
-                db.get(`
-                    SELECT l1.* FROM likes l1
-                    JOIN profiles p ON l1.to_profile_id = p.id
-                    WHERE l1.from_user_id = ? 
-                        AND p.user_id = ?
-                        AND l1.type = ?
-                `, [userId, profile.user_id, type], (err2, row) => {
-                    if (err2) reject(err2);
-                    resolve(row);
-                });
-            });
-        });
+    checkLikeDirect: async (fromUserId, toProfileId, type) => {
+        const result = await pool.query(
+            `SELECT * FROM likes WHERE from_user_id = $1 AND to_profile_id = $2 AND type = $3`,
+            [fromUserId, toProfileId, type]
+        );
+        return result.rows[0];
     },
     
-    createMatch: (user1Id, user2Id, type, chatId = null) => {
-        return new Promise((resolve, reject) => {
-            db.run(`INSERT INTO matches (user1_id, user2_id, type, chat_id) VALUES (?, ?, ?, ?)`,
-                [user1Id, user2Id, type, chatId],
-                function(err) {
-                    if (err) reject(err);
-                    resolve(this.lastID);
-                });
-        });
+    checkMutualLike: async (userId, otherUserProfileId, type) => {
+        const profileResult = await pool.query(`SELECT user_id FROM profiles WHERE id = $1`, [otherUserProfileId]);
+        if (!profileResult.rows[0]) return null;
+        
+        const result = await pool.query(`
+            SELECT l1.* FROM likes l1
+            JOIN profiles p ON l1.to_profile_id = p.id
+            WHERE l1.from_user_id = $1 
+                AND p.user_id = $2
+                AND l1.type = $3
+        `, [userId, profileResult.rows[0].user_id, type]);
+        return result.rows[0];
     },
     
-    createChat: (matchId) => {
-        return new Promise((resolve, reject) => {
-            db.run(`INSERT INTO chats (match_id) VALUES (?)`, [matchId], function(err) {
-                if (err) reject(err);
-                resolve(this.lastID);
-            });
-        });
+    createMatch: async (user1Id, user2Id, type, chatId = null) => {
+        const result = await pool.query(
+            `INSERT INTO matches (user1_id, user2_id, type, chat_id) VALUES ($1, $2, $3, $4) RETURNING id`,
+            [user1Id, user2Id, type, chatId]
+        );
+        return result.rows[0].id;
     },
     
-    getChatById: (chatId) => {
-        return new Promise((resolve, reject) => {
-            db.get(`SELECT * FROM chats WHERE id = ?`, [chatId], (err, row) => {
-                if (err) reject(err);
-                resolve(row);
-            });
-        });
+    createChat: async (matchId) => {
+        const result = await pool.query(
+            `INSERT INTO chats (match_id) VALUES ($1) RETURNING id`,
+            [matchId]
+        );
+        return result.rows[0].id;
     },
     
-    getChatByMatchId: (matchId) => {
-        return new Promise((resolve, reject) => {
-            db.get(`SELECT * FROM chats WHERE match_id = ?`, [matchId], (err, row) => {
-                if (err) reject(err);
-                resolve(row);
-            });
-        });
+    getChatById: async (chatId) => {
+        const result = await pool.query(`SELECT * FROM chats WHERE id = $1`, [chatId]);
+        return result.rows[0];
     },
     
-    getMatchByChatId: (chatId) => {
-        return new Promise((resolve, reject) => {
-            db.get(`SELECT m.* FROM matches m JOIN chats c ON m.id = c.match_id WHERE c.id = ?`, [chatId], (err, row) => {
-                if (err) reject(err);
-                resolve(row);
-            });
-        });
+    getChatByMatchId: async (matchId) => {
+        const result = await pool.query(`SELECT * FROM chats WHERE match_id = $1`, [matchId]);
+        return result.rows[0];
     },
     
-    closeChat: (chatId) => {
-        return new Promise((resolve, reject) => {
-            db.run(`UPDATE chats SET is_active = 0, closed_at = CURRENT_TIMESTAMP WHERE id = ?`, [chatId], function(err) {
-                if (err) {
-                    console.error('Ошибка закрытия чата:', err);
-                    reject(err);
-                } else {
-                    console.log(`✅ Чат ${chatId} закрыт, is_active = 0, изменено строк: ${this.changes}`);
-                    resolve(this.changes);
-                }
-            });
-        });
+    getMatchByChatId: async (chatId) => {
+        const result = await pool.query(
+            `SELECT m.* FROM matches m JOIN chats c ON m.id = c.match_id WHERE c.id = $1`,
+            [chatId]
+        );
+        return result.rows[0];
     },
     
-    addMessage: (chatId, fromUserId, message, attachment = null) => {
-        return new Promise((resolve, reject) => {
-            db.run(`INSERT INTO chat_messages (chat_id, from_user_id, message, attachment) VALUES (?, ?, ?, ?)`,
-                [chatId, fromUserId, message, attachment],
-                function(err) {
-                    if (err) reject(err);
-                    resolve(this.lastID);
-                });
-        });
+    closeChat: async (chatId) => {
+        const result = await pool.query(
+            `UPDATE chats SET is_active = 0, closed_at = CURRENT_TIMESTAMP WHERE id = $1`,
+            [chatId]
+        );
+        return result.rowCount;
     },
     
-    getChatMessages: (chatId) => {
-        return new Promise((resolve, reject) => {
-            db.all(`SELECT * FROM chat_messages WHERE chat_id = ? ORDER BY sent_at ASC`, [chatId], (err, rows) => {
-                if (err) reject(err);
-                resolve(rows);
-            });
-        });
+    addMessage: async (chatId, fromUserId, message, attachment = null) => {
+        const result = await pool.query(
+            `INSERT INTO chat_messages (chat_id, from_user_id, message, attachment) VALUES ($1, $2, $3, $4) RETURNING id`,
+            [chatId, fromUserId, message, attachment]
+        );
+        return result.rows[0].id;
     },
     
-    getActiveChatByUsers: (user1Id, user2Id) => {
-        return new Promise((resolve, reject) => {
-            db.get(`
-                SELECT c.* FROM chats c
-                JOIN matches m ON c.match_id = m.id
-                WHERE ((m.user1_id = ? AND m.user2_id = ?) OR (m.user1_id = ? AND m.user2_id = ?))
-                AND c.is_active = 1
-            `, [user1Id, user2Id, user2Id, user1Id], (err, row) => {
-                if (err) reject(err);
-                resolve(row);
-            });
-        });
+    getChatMessages: async (chatId) => {
+        const result = await pool.query(
+            `SELECT * FROM chat_messages WHERE chat_id = $1 ORDER BY sent_at ASC`,
+            [chatId]
+        );
+        return result.rows;
     },
     
-    addAdminLog: (adminId, action, targetId, details) => {
-        db.run(`INSERT INTO admin_logs (admin_id, action, target_id, details) VALUES (?, ?, ?, ?)`,
-            [adminId, action, targetId, details]);
+    getActiveChatByUsers: async (user1Id, user2Id) => {
+        const result = await pool.query(`
+            SELECT c.* FROM chats c
+            JOIN matches m ON c.match_id = m.id
+            WHERE ((m.user1_id = $1 AND m.user2_id = $2) OR (m.user1_id = $3 AND m.user2_id = $4))
+            AND c.is_active = 1
+        `, [user1Id, user2Id, user2Id, user1Id]);
+        return result.rows[0];
     },
     
-    addUserLog: (userId, action, details) => {
-        db.run(`INSERT INTO user_logs (user_id, action, details) VALUES (?, ?, ?)`,
-            [userId, action, details]);
+    addAdminLog: async (adminId, action, targetId, details) => {
+        await pool.query(
+            `INSERT INTO admin_logs (admin_id, action, target_id, details) VALUES ($1, $2, $3, $4)`,
+            [adminId, action, targetId, details]
+        );
     },
     
-    getAllUsers: () => {
-        return new Promise((resolve, reject) => {
-            db.all(`SELECT * FROM users ORDER BY registered_at DESC`, (err, rows) => {
-                if (err) reject(err);
-                resolve(rows);
-            });
-        });
+    addUserLog: async (userId, action, details) => {
+        await pool.query(
+            `INSERT INTO user_logs (user_id, action, details) VALUES ($1, $2, $3)`,
+            [userId, action, details]
+        );
     },
     
-    getAllProfiles: () => {
-        return new Promise((resolve, reject) => {
-            db.all(`SELECT p.*, u.vk_id, u.name as user_name FROM profiles p JOIN users u ON p.user_id = u.id`, (err, rows) => {
-                if (err) reject(err);
-                resolve(rows);
-            });
-        });
+    getAllUsers: async () => {
+        const result = await pool.query(`SELECT * FROM users ORDER BY registered_at DESC`);
+        return result.rows;
     },
     
-    getAllChats: () => {
-        return new Promise((resolve, reject) => {
-            db.all(`
-                SELECT c.*, 
-                       u1.vk_id as user1_vk, u2.vk_id as user2_vk,
-                       (SELECT message FROM chat_messages WHERE chat_id = c.id ORDER BY sent_at DESC LIMIT 1) as last_message
-                FROM chats c
-                JOIN matches m ON c.match_id = m.id
-                JOIN users u1 ON m.user1_id = u1.id
-                JOIN users u2 ON m.user2_id = u2.id
-                ORDER BY c.created_at DESC
-            `, (err, rows) => {
-                if (err) reject(err);
-                resolve(rows);
-            });
-        });
+    getAllProfiles: async () => {
+        const result = await pool.query(
+            `SELECT p.*, u.vk_id, u.name as user_name FROM profiles p JOIN users u ON p.user_id = u.id`
+        );
+        return result.rows;
     },
     
-    banUser: (vkId) => {
-        return new Promise((resolve, reject) => {
-            db.run(`UPDATE users SET is_banned = 1 WHERE vk_id = ?`, [vkId], function(err) {
-                if (err) reject(err);
-                resolve(this.changes);
-            });
-        });
+    getAllChats: async () => {
+        const result = await pool.query(`
+            SELECT c.*, 
+                   u1.vk_id as user1_vk, u2.vk_id as user2_vk,
+                   (SELECT message FROM chat_messages WHERE chat_id = c.id ORDER BY sent_at DESC LIMIT 1) as last_message
+            FROM chats c
+            JOIN matches m ON c.match_id = m.id
+            JOIN users u1 ON m.user1_id = u1.id
+            JOIN users u2 ON m.user2_id = u2.id
+            ORDER BY c.created_at DESC
+        `);
+        return result.rows;
     },
     
-    unbanUser: (vkId) => {
-        return new Promise((resolve, reject) => {
-            db.run(`UPDATE users SET is_banned = 0 WHERE vk_id = ?`, [vkId], function(err) {
-                if (err) reject(err);
-                resolve(this.changes);
-            });
-        });
+    banUser: async (vkId) => {
+        const result = await pool.query(`UPDATE users SET is_banned = 1 WHERE vk_id = $1`, [vkId]);
+        return result.rowCount;
     },
     
-    getStats: () => {
-        return new Promise((resolve, reject) => {
-            db.get(`
-                SELECT 
-                    (SELECT COUNT(*) FROM users) as total_users,
-                    (SELECT COUNT(*) FROM profiles) as total_profiles,
-                    (SELECT COUNT(*) FROM matches WHERE type = 'public') as public_matches,
-                    (SELECT COUNT(*) FROM matches WHERE type = 'anon') as anon_matches,
-                    (SELECT COUNT(*) FROM chats WHERE is_active = 1) as active_chats
-            `, (err, row) => {
-                if (err) reject(err);
-                resolve(row);
-            });
-        });
+    unbanUser: async (vkId) => {
+        const result = await pool.query(`UPDATE users SET is_banned = 0 WHERE vk_id = $1`, [vkId]);
+        return result.rowCount;
     },
     
-    getLastLogs: (limit = 50) => {
-        return new Promise((resolve, reject) => {
-            db.all(`
-                SELECT 'user' as type, user_id as actor, action, details, created_at 
-                FROM user_logs 
-                UNION ALL
-                SELECT 'admin' as type, admin_id as actor, action, details, created_at 
-                FROM admin_logs
-                ORDER BY created_at DESC LIMIT ?
-            `, [limit], (err, rows) => {
-                if (err) reject(err);
-                resolve(rows);
-            });
-        });
+    getStats: async () => {
+        const result = await pool.query(`
+            SELECT 
+                (SELECT COUNT(*) FROM users) as total_users,
+                (SELECT COUNT(*) FROM profiles) as total_profiles,
+                (SELECT COUNT(*) FROM matches WHERE type = 'public') as public_matches,
+                (SELECT COUNT(*) FROM matches WHERE type = 'anon') as anon_matches,
+                (SELECT COUNT(*) FROM chats WHERE is_active = 1) as active_chats
+        `);
+        return result.rows[0];
     },
     
-    // Прямой доступ к базе для операций UPDATE/DELETE
+    getLastLogs: async (limit = 50) => {
+        const result = await pool.query(`
+            SELECT 'user' as type, user_id as actor, action, details, created_at 
+            FROM user_logs 
+            UNION ALL
+            SELECT 'admin' as type, admin_id as actor, action, details, created_at 
+            FROM admin_logs
+            ORDER BY created_at DESC LIMIT $1
+        `, [limit]);
+        return result.rows;
+    },
+    
     direct: {
-        run: (sql, params) => {
-            return new Promise((resolve, reject) => {
-                db.run(sql, params, function(err) {
-                    if (err) reject(err);
-                    resolve(this);
-                });
-            });
+        run: async (sql, params) => {
+            const result = await pool.query(sql, params);
+            return { changes: result.rowCount };
         }
     }
 };
