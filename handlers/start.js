@@ -19,6 +19,11 @@ const EditSteps = {
     EDIT_SEARCH_GENDER: 'edit_search_gender'
 };
 
+// Состояния для удаления анкеты
+const DeleteSteps = {
+    CHOOSE_TYPE: 'delete_choose_type'
+};
+
 // Функция для получения главной клавиатуры (с админ-кнопкой или без)
 function getMainKeyboard(userId) {
     if (userId == config.adminId) {
@@ -352,7 +357,7 @@ async function handleEditName(context, vk, text) {
         return { action: 'error' };
     }
     
-    await db.direct.run(`UPDATE profiles SET name = ? WHERE id = ?`, [text.trim(), profile.id]);
+    await db.direct.run(`UPDATE profiles SET name = $1 WHERE id = $2`, [text.trim(), profile.id]);
     await db.addUserLog(userId, 'edit_profile', `Изменено имя на ${text.trim()}`);
     
     await context.send(`✅ Имя успешно изменено на "${text.trim()}"!`);
@@ -383,7 +388,7 @@ async function handleEditAge(context, vk, text) {
         return { action: 'error' };
     }
     
-    await db.direct.run(`UPDATE profiles SET age = ? WHERE id = ?`, [parseInt(text), profile.id]);
+    await db.direct.run(`UPDATE profiles SET age = $1 WHERE id = $2`, [parseInt(text), profile.id]);
     await db.addUserLog(userId, 'edit_profile', `Изменён возраст на ${text}`);
     
     await context.send(`✅ Возраст успешно изменён на ${text} лет!`);
@@ -400,7 +405,6 @@ async function handleEditCity(context, vk, text) {
     
     if (!state || state.step !== EditSteps.EDIT_CITY) return false;
     
-    // Базовая валидация города
     const cityRegex = /^[а-яА-ЯёЁ\s\-\.]+$/;
     
     if (!cityRegex.test(text)) {
@@ -413,7 +417,6 @@ async function handleEditCity(context, vk, text) {
         return { action: 'city_invalid' };
     }
     
-    // Приводим к нормальному виду (первая буква заглавная)
     const normalizedCity = text.charAt(0).toUpperCase() + text.slice(1).toLowerCase();
     
     const user = await db.getUserByVkId(userId);
@@ -425,7 +428,7 @@ async function handleEditCity(context, vk, text) {
         return { action: 'error' };
     }
     
-    await db.direct.run(`UPDATE profiles SET city = ? WHERE id = ?`, [normalizedCity, profile.id]);
+    await db.direct.run(`UPDATE profiles SET city = $1 WHERE id = $2`, [normalizedCity, profile.id]);
     await db.addUserLog(userId, 'edit_profile', `Изменён город на ${normalizedCity}`);
     
     await context.send(`✅ Город успешно изменён на "${normalizedCity}"!`);
@@ -452,7 +455,6 @@ async function handleEditPhoto(context, vk) {
                 const photoUrl = attach.sizes[attach.sizes.length - 1].url;
                 console.log('URL фото для перезагрузки:', photoUrl);
                 
-                // 5 попыток перезагрузки фото
                 let success = false;
                 let lastError = null;
                 
@@ -516,7 +518,7 @@ async function handleEditPhoto(context, vk) {
         return { action: 'error' };
     }
     
-    await db.direct.run(`UPDATE profiles SET photo = ? WHERE id = ?`, [photoAttachment, profile.id]);
+    await db.direct.run(`UPDATE profiles SET photo = $1 WHERE id = $2`, [photoAttachment, profile.id]);
     await db.addUserLog(userId, 'edit_profile', `Изменено фото`);
     
     await context.send(`✅ Фото успешно обновлено!`);
@@ -547,7 +549,7 @@ async function handleEditGender(context, vk, text) {
         return { action: 'error' };
     }
     
-    await db.direct.run(`UPDATE profiles SET gender = ? WHERE id = ?`, [gender, profile.id]);
+    await db.direct.run(`UPDATE profiles SET gender = $1 WHERE id = $2`, [gender, profile.id]);
     await db.addUserLog(userId, 'edit_profile', `Изменён пол на ${gender}`);
     
     await context.send(`✅ Пол успешно изменён!`);
@@ -579,7 +581,7 @@ async function handleEditSearchGender(context, vk, text) {
         return { action: 'error' };
     }
     
-    await db.direct.run(`UPDATE profiles SET search_gender = ? WHERE id = ?`, [searchGender, profile.id]);
+    await db.direct.run(`UPDATE profiles SET search_gender = $1 WHERE id = $2`, [searchGender, profile.id]);
     await db.addUserLog(userId, 'edit_profile', `Изменён поиск на ${searchGender}`);
     
     await context.send(`✅ Настройки поиска успешно изменены!`);
@@ -627,6 +629,7 @@ async function handleDeleteProfile(context, vk, profileType = null) {
         return { action: 'error' };
     }
     
+    // Если тип не указан, показываем выбор
     if (!profileType) {
         const publicProfile = await db.getProfileByUserIdAndType(user.id, 'public');
         const anonProfile = await db.getProfileByUserIdAndType(user.id, 'anon');
@@ -652,10 +655,13 @@ async function handleDeleteProfile(context, vk, profileType = null) {
             await db.deleteProfile(anonProfile.id);
             await db.addUserLog(userId, 'delete_profile', 'Удалена анонимная анкета');
             await context.send('✅ Анонимная анкета удалена!', { keyboard: getMainKeyboard(userId) });
+        } else {
+            await context.send('❌ У тебя нет анкет для удаления', { keyboard: getMainKeyboard(userId) });
         }
         return { action: 'deleted' };
     }
     
+    // Если тип указан, удаляем конкретную анкету
     const profile = await db.getProfileByUserIdAndType(user.id, profileType);
     if (profile) {
         await db.deleteProfile(profile.id);
