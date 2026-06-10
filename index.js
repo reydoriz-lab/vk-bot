@@ -13,7 +13,7 @@ const profileHandler = require('./handlers/profile');
 const searchHandler = require('./handlers/search');
 const chatHandler = require('./handlers/chat');
 const adminHandler = require('./handlers/admin');
-const adminPanel = require('./handlers/adminPanel'); // НОВЫЙ ИМПОРТ
+const adminPanel = require('./handlers/adminPanel');
 
 helpers.ensureTempFolder();
 
@@ -79,10 +79,8 @@ async function handleMessage(context) {
     
     // ========== ОБРАБОТКА АДМИН-ПАНЕЛИ (КНОПКИ) ==========
     if (userId == config.adminId) {
-        // Обработка состояний админ-панели (ввод ID для бана или текста рассылки)
         const adminState = adminPanel.adminStates.get(userId);
         
-        // ВАЖНО: сначала проверяем кнопку "Назад в админку", потом остальное
         if (text === '🔙 Назад в админку') {
             adminPanel.adminStates.delete(userId);
             await adminPanel.showAdminPanel(context);
@@ -99,7 +97,6 @@ async function handleMessage(context) {
             return;
         }
         
-        // Обработка пагинации пользователей
         if (adminState && adminState.module === 'users') {
             if (text === '⬅️ Предыдущие') {
                 await adminPanel.showUsers(context, adminState.page - 1);
@@ -115,7 +112,6 @@ async function handleMessage(context) {
             }
         }
         
-        // Обработка пагинации анкет
         if (adminState && adminState.module === 'profiles') {
             if (text === '⬅️ Предыдущие') {
                 await adminPanel.showProfiles(context, adminState.page - 1);
@@ -131,7 +127,6 @@ async function handleMessage(context) {
             }
         }
         
-        // Кнопки админ-панели
         if (text === '👑 Админ-панель') {
             await adminPanel.showAdminPanel(context);
             return;
@@ -163,46 +158,54 @@ async function handleMessage(context) {
         }
     }
     
-    // ========== ОСТАЛЬНАЯ ОБРАБОТКА (без изменений) ==========
+    // ========== ОБРАБОТКА РЕДАКТИРОВАНИЯ АНКЕТЫ ==========
     
-    // Выбор типа анкеты для редактирования
     if (text === '📋 Обычную анкету' || text === '🔞 Анонимную анкету') {
         const result = await startHandler.handleEditChoice(context, vk, text);
         if (result) return;
     }
     
-    // Обработка редактирования анкеты
     if (text === '✏️ Редактировать анкету') {
         await startHandler.handleEditProfile(context, vk);
         return;
     }
     
-    // Обработка выбора поля для редактирования
+    // ========== ОБРАБОТКА УДАЛЕНИЯ АНКЕТЫ ==========
+    if (text === '🗑 Удалить анкету') {
+        await startHandler.handleDeleteProfile(context, vk);
+        return;
+    }
+    if (text === '🗑 Обычную анкету') {
+        await startHandler.handleDeleteProfile(context, vk, 'public');
+        return;
+    }
+    if (text === '🔞 Анонимную анкету') {
+        await startHandler.handleDeleteProfile(context, vk, 'anon');
+        return;
+    }
+    
+    // ========== ОБРАБОТКА СОСТОЯНИЙ РЕДАКТИРОВАНИЯ ==========
     const editState = startHandler.userStates.get(userId);
     if (editState && editState.step === startHandler.EditSteps?.CHOOSE_FIELD) {
         const result = await startHandler.handleEditFieldChoice(context, vk, text);
         if (result) return;
     }
     
-    // Обработка редактирования имени
     if (editState && editState.step === startHandler.EditSteps?.EDIT_NAME) {
         const result = await startHandler.handleEditName(context, vk, text);
         if (result) return;
     }
     
-    // Обработка редактирования возраста
     if (editState && editState.step === startHandler.EditSteps?.EDIT_AGE) {
         const result = await startHandler.handleEditAge(context, vk, text);
         if (result) return;
     }
     
-    // Обработка редактирования города
     if (editState && editState.step === startHandler.EditSteps?.EDIT_CITY) {
         const result = await startHandler.handleEditCity(context, vk, text);
         if (result) return;
     }
     
-    // Обработка редактирования фото
     if (editState && editState.step === startHandler.EditSteps?.EDIT_PHOTO) {
         if (context.attachments && context.attachments.length > 0) {
             const result = await startHandler.handleEditPhoto(context, vk);
@@ -213,13 +216,11 @@ async function handleMessage(context) {
         }
     }
     
-    // Обработка редактирования пола
     if (editState && editState.step === startHandler.EditSteps?.EDIT_GENDER) {
         const result = await startHandler.handleEditGender(context, vk, text);
         if (result) return;
     }
     
-    // Обработка редактирования кого ищет
     if (editState && editState.step === startHandler.EditSteps?.EDIT_SEARCH_GENDER) {
         const result = await startHandler.handleEditSearchGender(context, vk, text);
         if (result) return;
@@ -337,7 +338,7 @@ async function handleMessage(context) {
         return;
     }
     
-    // Обработка состояний создания анкеты
+    // ========== ОБРАБОТКА СОЗДАНИЯ АНКЕТЫ ==========
     const profileState = startHandler.userStates.get(userId);
     if (profileState && !editState) {
         const step = profileState.step;
@@ -377,6 +378,7 @@ async function handleMessage(context) {
         }
     }
     
+    // ========== ОСНОВНЫЕ КНОПКИ МЕНЮ ==========
     if (text === '🔍 Обычный поиск') {
         await searchHandler.handlePublicSearch(context, vk);
         return;
@@ -391,18 +393,6 @@ async function handleMessage(context) {
     }
     if (text === '✏️ Создать анкету') {
         await profileHandler.handleCreateProfile(context, vk);
-        return;
-    }
-    if (text === '🗑 Удалить анкету') {
-        await startHandler.handleDeleteProfile(context, vk);
-        return;
-    }
-    if (text === '🗑 Обычную анкету') {
-        await startHandler.handleDeleteProfile(context, vk, 'public');
-        return;
-    }
-    if (text === '🔞 Анонимную анкету') {
-        await startHandler.handleDeleteProfile(context, vk, 'anon');
         return;
     }
     if (text === '❤️ Лайк') {
@@ -436,6 +426,7 @@ async function handleMessage(context) {
         return;
     }
     
+    // ========== ОБРАБОТКА СООБЩЕНИЙ В ЧАТЕ ==========
     if ((text && !text.startsWith('/')) || context.attachments) {
         await chatHandler.handleChatMessage(context, vk);
         return;
