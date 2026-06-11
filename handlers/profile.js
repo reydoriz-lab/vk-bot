@@ -82,9 +82,12 @@ async function reloadPhoto(vk, photoUrl) {
 
 async function handleCreateProfile(context, vk) {
     const userId = context.senderId;
+    console.log(`🔵 [СОЗДАНИЕ АНКЕТЫ] Пользователь ${userId} начал создание анкеты`);
+    
     const user = await db.getUserByVkId(userId);
     
     if (!user) {
+        console.log(`🔴 [СОЗДАНИЕ АНКЕТЫ] Пользователь ${userId} не найден в БД`);
         await context.send('❌ Ошибка. Напишите /start');
         return { action: 'error' };
     }
@@ -92,7 +95,10 @@ async function handleCreateProfile(context, vk) {
     const publicProfile = await db.getProfileByUserIdAndType(user.id, 'public');
     const anonProfile = await db.getProfileByUserIdAndType(user.id, 'anon');
     
+    console.log(`📊 [СОЗДАНИЕ АНКЕТЫ] Пользователь ${userId}: public=${!!publicProfile}, anon=${!!anonProfile}`);
+    
     if (publicProfile && anonProfile) {
+        console.log(`🔴 [СОЗДАНИЕ АНКЕТЫ] У пользователя ${userId} уже есть обе анкеты`);
         await context.send('❌ У тебя уже есть обе анкеты (обычная и анонимная).\n\nЧтобы создать новую, сначала удали старую через "Моя анкета"', {
             keyboard: JSON.stringify({
                 one_time: false,
@@ -112,6 +118,8 @@ async function handleCreateProfile(context, vk) {
         tempData: {}
     });
     
+    console.log(`🟢 [СОЗДАНИЕ АНКЕТЫ] Состояние установлено: CHOOSE_TYPE для ${userId}`);
+    
     await context.send('📝 Какую анкету хочешь создать?', {
         keyboard: JSON.stringify({
             one_time: true,
@@ -129,6 +137,8 @@ async function handleProfileTypeChoice(context, vk, text) {
     const userId = context.senderId;
     const state = userStates.get(userId);
     
+    console.log(`🔵 [ВЫБОР ТИПА] Пользователь ${userId}, текст: "${text}", состояние: ${state ? state.step : 'нет'}`);
+    
     if (!state || state.step !== ProfileSteps.CHOOSE_TYPE) return false;
     
     let type = null;
@@ -136,10 +146,13 @@ async function handleProfileTypeChoice(context, vk, text) {
     else if (text === '🔞 Анонимная анкета') type = 'anon';
     else return false;
     
+    console.log(`📝 [ВЫБОР ТИПА] Пользователь ${userId} выбрал тип: ${type}`);
+    
     const user = await db.getUserByVkId(userId);
     const existingProfile = await db.getProfileByUserIdAndType(user.id, type);
     
     if (existingProfile) {
+        console.log(`🔴 [ВЫБОР ТИПА] У пользователя ${userId} уже есть анкета типа ${type}`);
         await context.send(`❌ У тебя уже есть ${type === 'public' ? 'обычная' : 'анонимная'} анкета.\n\nСначала удали её через "Моя анкета"`, {
             keyboard: JSON.stringify({
                 one_time: false,
@@ -159,6 +172,8 @@ async function handleProfileTypeChoice(context, vk, text) {
     state.step = ProfileSteps.CHOOSE_GENDER;
     userStates.set(userId, state);
     
+    console.log(`🟢 [ВЫБОР ТИПА] Переход к CHOOSE_GENDER для ${userId}`);
+    
     await context.send('👤 Укажи свой пол:', {
         keyboard: JSON.stringify({
             one_time: true,
@@ -176,12 +191,16 @@ async function handleGenderChoice(context, vk, text) {
     const userId = context.senderId;
     const state = userStates.get(userId);
     
+    console.log(`🔵 [ВЫБОР ПОЛА] Пользователь ${userId}, текст: "${text}"`);
+    
     if (!state || state.step !== ProfileSteps.CHOOSE_GENDER) return false;
     
     let gender = null;
     if (text === '👨 Мужской') gender = 'male';
     else if (text === '👩 Женский') gender = 'female';
     else return false;
+    
+    console.log(`📝 [ВЫБОР ПОЛА] Пользователь ${userId} выбрал пол: ${gender}`);
     
     state.tempData.gender = gender;
     state.step = ProfileSteps.CHOOSE_SEARCH_GENDER;
@@ -205,6 +224,8 @@ async function handleSearchGenderChoice(context, vk, text) {
     const userId = context.senderId;
     const state = userStates.get(userId);
     
+    console.log(`🔵 [ВЫБОР ПОИСКА] Пользователь ${userId}, текст: "${text}"`);
+    
     if (!state || state.step !== ProfileSteps.CHOOSE_SEARCH_GENDER) return false;
     
     let searchGender = null;
@@ -212,6 +233,8 @@ async function handleSearchGenderChoice(context, vk, text) {
     else if (text === '👩 Женщин') searchGender = 'female';
     else if (text === '👥 Всех') searchGender = 'all';
     else return false;
+    
+    console.log(`📝 [ВЫБОР ПОИСКА] Пользователь ${userId} выбрал ищет: ${searchGender}`);
     
     state.tempData.searchGender = searchGender;
     state.step = ProfileSteps.ENTER_NAME;
@@ -228,9 +251,12 @@ async function handleNameInput(context, vk, text) {
     const userId = context.senderId;
     const state = userStates.get(userId);
     
+    console.log(`🔵 [ВВОД ИМЕНИ] Пользователь ${userId}, имя: "${text}"`);
+    
     if (!state || state.step !== ProfileSteps.ENTER_NAME) return false;
     
     if (!helpers.isValidName(text)) {
+        console.log(`🔴 [ВВОД ИМЕНИ] Невалидное имя: ${text}`);
         await context.send('❌ Имя должно быть от 2 до 50 символов. Попробуй ещё раз:');
         return { action: 'name_invalid' };
     }
@@ -238,6 +264,8 @@ async function handleNameInput(context, vk, text) {
     state.tempData.name = text.trim();
     state.step = ProfileSteps.ENTER_AGE;
     userStates.set(userId, state);
+    
+    console.log(`🟢 [ВВОД ИМЕНИ] Имя сохранено: ${text.trim()}, переход к ENTER_AGE`);
     
     await context.send('🎂 Введи свой возраст (от 18 лет):');
     
@@ -248,9 +276,12 @@ async function handleAgeInput(context, vk, text) {
     const userId = context.senderId;
     const state = userStates.get(userId);
     
+    console.log(`🔵 [ВВОД ВОЗРАСТА] Пользователь ${userId}, возраст: "${text}"`);
+    
     if (!state || state.step !== ProfileSteps.ENTER_AGE) return false;
     
     if (!helpers.isValidAge(text)) {
+        console.log(`🔴 [ВВОД ВОЗРАСТА] Невалидный возраст: ${text}`);
         await context.send('❌ Возраст должен быть числом от 18 до 100 лет. Попробуй ещё раз:');
         return { action: 'age_invalid' };
     }
@@ -258,6 +289,8 @@ async function handleAgeInput(context, vk, text) {
     state.tempData.age = parseInt(text);
     state.step = ProfileSteps.ENTER_CITY;
     userStates.set(userId, state);
+    
+    console.log(`🟢 [ВВОД ВОЗРАСТА] Возраст сохранен: ${text}, переход к ENTER_CITY`);
     
     await context.send('🏙 Введи название своего города:');
     
@@ -268,17 +301,21 @@ async function handleCityInput(context, vk, text) {
     const userId = context.senderId;
     const state = userStates.get(userId);
     
+    console.log(`🔵 [ВВОД ГОРОДА] Пользователь ${userId}, город: "${text}"`);
+    
     if (!state || state.step !== ProfileSteps.ENTER_CITY) return false;
     
     // Базовая валидация города
     const cityRegex = /^[а-яА-ЯёЁ\s\-\.]+$/;
     
     if (!cityRegex.test(text)) {
+        console.log(`🔴 [ВВОД ГОРОДА] Невалидный город (символы): ${text}`);
         await context.send('❌ Название города может содержать только русские буквы, пробелы, дефис или точку.\n\nПримеры: Москва, Санкт-Петербург, Ростов-на-Дону\n\nПопробуй ещё раз:');
         return { action: 'city_invalid' };
     }
     
     if (text.length < 2 || text.length > 50) {
+        console.log(`🔴 [ВВОД ГОРОДА] Невалидный город (длина): ${text.length}`);
         await context.send('❌ Название города должно быть от 2 до 50 символов. Попробуй ещё раз:');
         return { action: 'city_invalid' };
     }
@@ -290,6 +327,8 @@ async function handleCityInput(context, vk, text) {
     state.step = ProfileSteps.UPLOAD_PHOTO;
     userStates.set(userId, state);
     
+    console.log(`🟢 [ВВОД ГОРОДА] Город сохранен: ${normalizedCity}, переход к UPLOAD_PHOTO`);
+    
     await context.send(`✅ Город сохранён: ${normalizedCity}\n\n📸 Отправь своё фото для анкеты.\n\nПросто отправь изображение в этот чат:`);
     
     return { action: 'photo_asked' };
@@ -299,6 +338,8 @@ async function handlePhotoUpload(context, vk) {
     const userId = context.senderId;
     const state = userStates.get(userId);
     
+    console.log(`🔵 [ЗАГРУЗКА ФОТО] Пользователь ${userId}, есть вложения: ${!!context.attachments}`);
+    
     if (!state || state.step !== ProfileSteps.UPLOAD_PHOTO) return false;
     
     let photoAttachment = null;
@@ -306,24 +347,29 @@ async function handlePhotoUpload(context, vk) {
     
     if (context.attachments && context.attachments.length > 0) {
         const attach = context.attachments[0];
+        console.log(`📎 [ЗАГРУЗКА ФОТО] Тип вложения: ${attach.type || 'unknown'}`);
         
         if (attach.ownerId && attach.id && attach.albumId === -3) {
             if (attach.sizes && attach.sizes.length > 0) {
                 photoUrl = attach.sizes[attach.sizes.length - 1].url;
-                console.log('URL фото для перезагрузки:', photoUrl);
+                console.log(`📸 [ЗАГРУЗКА ФОТО] URL фото: ${photoUrl}`);
             }
             
             if (photoUrl) {
+                console.log(`🔄 [ЗАГРУЗКА ФОТО] Перезагрузка фото...`);
                 const newPhoto = await reloadPhoto(vk, photoUrl);
                 if (newPhoto) {
                     photoAttachment = newPhoto;
-                    console.log('После перезагрузки:', photoAttachment);
+                    console.log(`✅ [ЗАГРУЗКА ФОТО] Фото перезагружено: ${photoAttachment}`);
+                } else {
+                    console.log(`🔴 [ЗАГРУЗКА ФОТО] Ошибка перезагрузки фото`);
                 }
             }
         }
     }
     
     if (!photoAttachment) {
+        console.log(`🔴 [ЗАГРУЗКА ФОТО] Не удалось получить фото от пользователя ${userId}`);
         await context.send('❌ Не удалось распознать фото. Пожалуйста, отправь изображение заново.');
         return { action: 'photo_invalid' };
     }
@@ -331,8 +377,11 @@ async function handlePhotoUpload(context, vk) {
     state.tempData.photo = photoAttachment;
     
     const user = await db.getUserByVkId(userId);
+    console.log(`👤 [ЗАГРУЗКА ФОТО] Пользователь найден: id=${user.id}, vk_id=${user.vk_id}`);
     
     try {
+        console.log(`💾 [СОХРАНЕНИЕ АНКЕТЫ] Данные: type=${state.tempData.type}, name=${state.tempData.name}, age=${state.tempData.age}, city=${state.tempData.city}`);
+        
         await db.createProfile(
             user.id,
             state.tempData.type,
@@ -343,6 +392,8 @@ async function handlePhotoUpload(context, vk) {
             state.tempData.city,
             state.tempData.photo
         );
+        
+        console.log(`✅ [СОХРАНЕНИЕ АНКЕТЫ] Анкета успешно создана для пользователя ${userId}`);
         
         await db.addUserLog(userId, 'create_profile', `Создана ${state.tempData.type === 'public' ? 'обычная' : 'анонимная'} анкета`);
         
@@ -370,11 +421,12 @@ async function handlePhotoUpload(context, vk) {
         });
         
         userStates.delete(userId);
+        console.log(`🗑 [СОЗДАНИЕ АНКЕТЫ] Состояние пользователя ${userId} очищено`);
         
         return { action: 'profile_created', profile: state.tempData };
         
     } catch (err) {
-        console.error('Error creating profile:', err);
+        console.error(`🔴 [ОШИБКА СОЗДАНИЯ АНКЕТЫ] Пользователь ${userId}:`, err);
         await context.send('❌ Ошибка при создании анкеты. Попробуй позже.', {
             keyboard: JSON.stringify({
                 one_time: false,
