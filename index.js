@@ -79,10 +79,21 @@ async function handleMessage(context) {
     
     // ========== ВАЖНО: СНАЧАЛА ОБРАБАТЫВАЕМ КНОПКИ ВЫБОРА ТИПА АНКЕТЫ ==========
     // Эти кнопки появляются при создании и редактировании анкеты
-    if (text === '📋 Обычная анкета' || text === '🔞 Анонимную анкету') {
-        console.log(`🎯 [ОБРАБОТКА] Кнопка выбора типа анкеты: ${text}`);
-        const result = await startHandler.handleEditChoice(context, vk, text);
-        if (result) return;
+    if (text === '📋 Обычная анкета' || text === '🔞 Анонимная анкета') {
+        console.log(`🎯 [ОБРАБОТКА] Кнопка выбора типа для СОЗДАНИЯ анкеты: ${text}`);
+        
+        // Проверяем, есть ли у пользователя активный процесс создания анкеты
+        const profileState = startHandler.userStates.get(userId);
+        if (profileState && profileState.step === profileHandler.ProfileSteps.CHOOSE_TYPE) {
+            console.log(`✅ [СОЗДАНИЕ] Передаём в profileHandler.handleProfileTypeChoice`);
+            const result = await profileHandler.handleProfileTypeChoice(context, vk, text);
+            if (result) return;
+        } else {
+            // Если нет процесса создания — значит это редактирование
+            console.log(`✏️ [РЕДАКТИРОВАНИЕ] Передаём в startHandler.handleEditChoice`);
+            const result = await startHandler.handleEditChoice(context, vk, text);
+            if (result) return;
+        }
     }
     
     // ========== ОБРАБОТКА АДМИН-ПАНЕЛИ ==========
