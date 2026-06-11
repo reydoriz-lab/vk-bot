@@ -316,6 +316,7 @@ async function handleMessage(context) {
     
     // ========== ОБРАБОТКА ВЗАИМНОГО ЛАЙКА ==========
     if (text === '❤️ Взаимный лайк') {
+        // Ищем по userId (тот, кто нажал кнопку)
         const likeState = searchHandler.likeStates.get(userId);
         if (!likeState) {
             await context.send('❌ Ошибка: не найден лайк для ответа');
