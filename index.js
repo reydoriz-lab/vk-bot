@@ -22,7 +22,6 @@ const vk = new VK({
     apiVersion: config.apiVersion
 });
 
-// Функция для получения главной клавиатуры (с админ-кнопкой или без)
 function getMainKeyboard(userId) {
     if (userId == config.adminId) {
         return JSON.stringify(keyboards.adminButton);
@@ -77,19 +76,61 @@ async function handleMessage(context) {
         return;
     }
     
-    // ========== ВАЖНО: СНАЧАЛА ОБРАБАТЫВАЕМ КНОПКИ ВЫБОРА ТИПА АНКЕТЫ ==========
-    // Эти кнопки появляются при создании и редактировании анкеты
+    // ========== СНАЧАЛА ПРОВЕРЯЕМ СОСТОЯНИЯ СОЗДАНИЯ АНКЕТЫ ==========
+    const profileState = startHandler.userStates.get(userId);
+    const editState = startHandler.userStates.get(userId); // временно, для совместимости
+    
+    if (profileState && profileState.step === profileHandler.ProfileSteps.CHOOSE_GENDER) {
+        console.log(`🎯 [ОБРАБОТКА] CHOOSE_GENDER, текст: ${text}`);
+        const result = await profileHandler.handleGenderChoice(context, vk, text);
+        if (result) return;
+    }
+    
+    if (profileState && profileState.step === profileHandler.ProfileSteps.CHOOSE_SEARCH_GENDER) {
+        console.log(`🎯 [ОБРАБОТКА] CHOOSE_SEARCH_GENDER, текст: ${text}`);
+        const result = await profileHandler.handleSearchGenderChoice(context, vk, text);
+        if (result) return;
+    }
+    
+    if (profileState && profileState.step === profileHandler.ProfileSteps.ENTER_NAME) {
+        console.log(`🎯 [ОБРАБОТКА] ENTER_NAME, текст: ${text}`);
+        const result = await profileHandler.handleNameInput(context, vk, text);
+        if (result) return;
+    }
+    
+    if (profileState && profileState.step === profileHandler.ProfileSteps.ENTER_AGE) {
+        console.log(`🎯 [ОБРАБОТКА] ENTER_AGE, текст: ${text}`);
+        const result = await profileHandler.handleAgeInput(context, vk, text);
+        if (result) return;
+    }
+    
+    if (profileState && profileState.step === profileHandler.ProfileSteps.ENTER_CITY) {
+        console.log(`🎯 [ОБРАБОТКА] ENTER_CITY, текст: ${text}`);
+        const result = await profileHandler.handleCityInput(context, vk, text);
+        if (result) return;
+    }
+    
+    if (profileState && profileState.step === profileHandler.ProfileSteps.UPLOAD_PHOTO) {
+        console.log(`🎯 [ОБРАБОТКА] UPLOAD_PHOTO`);
+        if (context.attachments && context.attachments.length > 0) {
+            const result = await profileHandler.handlePhotoUpload(context, vk);
+            if (result) return;
+        } else {
+            await context.send('📸 Пожалуйста, отправь фото. Если передумал(а) - напиши "отмена"');
+            return;
+        }
+    }
+    
+    // ========== ВАЖНО: ОБРАБАТЫВАЕМ КНОПКИ ВЫБОРА ТИПА АНКЕТЫ ==========
     if (text === '📋 Обычная анкета' || text === '🔞 Анонимная анкета') {
         console.log(`🎯 [ОБРАБОТКА] Кнопка выбора типа для СОЗДАНИЯ анкеты: ${text}`);
         
-        // Проверяем, есть ли у пользователя активный процесс создания анкеты
-        const profileState = startHandler.userStates.get(userId);
-        if (profileState && profileState.step === profileHandler.ProfileSteps.CHOOSE_TYPE) {
+        const profileStateCheck = startHandler.userStates.get(userId);
+        if (profileStateCheck && profileStateCheck.step === profileHandler.ProfileSteps.CHOOSE_TYPE) {
             console.log(`✅ [СОЗДАНИЕ] Передаём в profileHandler.handleProfileTypeChoice`);
             const result = await profileHandler.handleProfileTypeChoice(context, vk, text);
             if (result) return;
         } else {
-            // Если нет процесса создания — значит это редактирование
             console.log(`✏️ [РЕДАКТИРОВАНИЕ] Передаём в startHandler.handleEditChoice`);
             const result = await startHandler.handleEditChoice(context, vk, text);
             if (result) return;
@@ -198,7 +239,6 @@ async function handleMessage(context) {
     }
     
     // ========== ОБРАБОТКА СОСТОЯНИЙ РЕДАКТИРОВАНИЯ ==========
-    const editState = startHandler.userStates.get(userId);
     if (editState && editState.step === startHandler.EditSteps?.CHOOSE_FIELD) {
         const result = await startHandler.handleEditFieldChoice(context, vk, text);
         if (result) return;
@@ -349,46 +389,6 @@ async function handleMessage(context) {
     if (text === '/start' || text === '/меню') {
         await startHandler.handleStart(context, vk);
         return;
-    }
-    
-    // ========== ОБРАБОТКА СОЗДАНИЯ АНКЕТЫ ==========
-    const profileState = startHandler.userStates.get(userId);
-    if (profileState && !editState) {
-        const step = profileState.step;
-        
-        if (step === profileHandler.ProfileSteps.CHOOSE_TYPE) {
-            const result = await profileHandler.handleProfileTypeChoice(context, vk, text);
-            if (result) return;
-        }
-        else if (step === profileHandler.ProfileSteps.CHOOSE_GENDER) {
-            const result = await profileHandler.handleGenderChoice(context, vk, text);
-            if (result) return;
-        }
-        else if (step === profileHandler.ProfileSteps.CHOOSE_SEARCH_GENDER) {
-            const result = await profileHandler.handleSearchGenderChoice(context, vk, text);
-            if (result) return;
-        }
-        else if (step === profileHandler.ProfileSteps.ENTER_NAME) {
-            const result = await profileHandler.handleNameInput(context, vk, text);
-            if (result) return;
-        }
-        else if (step === profileHandler.ProfileSteps.ENTER_AGE) {
-            const result = await profileHandler.handleAgeInput(context, vk, text);
-            if (result) return;
-        }
-        else if (step === profileHandler.ProfileSteps.ENTER_CITY) {
-            const result = await profileHandler.handleCityInput(context, vk, text);
-            if (result) return;
-        }
-        else if (step === profileHandler.ProfileSteps.UPLOAD_PHOTO) {
-            if (context.attachments && context.attachments.length > 0) {
-                const result = await profileHandler.handlePhotoUpload(context, vk);
-                if (result) return;
-            } else {
-                await context.send('📸 Пожалуйста, отправь фото. Если передумал(а) - напиши "отмена"');
-                return;
-            }
-        }
     }
     
     // ========== ОСНОВНЫЕ КНОПКИ МЕНЮ ==========
