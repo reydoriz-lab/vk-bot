@@ -5,7 +5,6 @@ const pool = new Pool({
     ssl: { rejectUnauthorized: false }
 });
 
-// Инициализация всех таблиц
 async function initTables() {
     const client = await pool.connect();
     try {
@@ -240,14 +239,12 @@ module.exports = {
     },
     
     createMatch: async (user1Id, user2Id, type, chatId = null) => {
-        // Проверяем, существует ли уже такой мэтч (в любом порядке)
         const existing = await pool.query(
             `SELECT id FROM matches WHERE (user1_id = $1 AND user2_id = $2) OR (user1_id = $2 AND user2_id = $1)`,
             [user1Id, user2Id]
         );
         
         if (existing.rows[0]) {
-            console.log(`Мэтч уже существует: id=${existing.rows[0].id}`);
             return existing.rows[0].id;
         }
         
@@ -255,27 +252,29 @@ module.exports = {
             `INSERT INTO matches (user1_id, user2_id, type, chat_id) VALUES ($1, $2, $3, $4) RETURNING id`,
             [user1Id, user2Id, type, chatId]
         );
-        console.log(`Создан новый мэтч: id=${result.rows[0].id}`);
         return result.rows[0].id;
     },
     
     createChat: async (matchId) => {
-        // Проверяем, существует ли уже чат для этого мэтча
         const existing = await pool.query(
-            `SELECT id FROM chats WHERE match_id = $1`,
+            `SELECT id, is_active FROM chats WHERE match_id = $1`,
             [matchId]
         );
         
         if (existing.rows[0]) {
-            console.log(`Чат уже существует: id=${existing.rows[0].id}`);
+            if (existing.rows[0].is_active === 0) {
+                await pool.query(
+                    `UPDATE chats SET is_active = 1, closed_at = NULL WHERE id = $1`,
+                    [existing.rows[0].id]
+                );
+            }
             return existing.rows[0].id;
         }
         
         const result = await pool.query(
-            `INSERT INTO chats (match_id) VALUES ($1) RETURNING id`,
+            `INSERT INTO chats (match_id, is_active) VALUES ($1, 1) RETURNING id`,
             [matchId]
         );
-        console.log(`Создан новый чат: id=${result.rows[0].id}`);
         return result.rows[0].id;
     },
     
