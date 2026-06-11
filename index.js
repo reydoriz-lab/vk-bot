@@ -76,7 +76,7 @@ async function handleMessage(context) {
         return;
     }
     
-    // ========== ОБРАБОТКА КНОПОК РЕДАКТИРОВАНИЯ (СПЕЦИАЛЬНЫЕ) ==========
+    // ========== ОБРАБОТКА КНОПОК РЕДАКТИРОВАНИЯ ==========
     if (text === '✏️ Обычную анкету' || text === '✏️ Анонимную анкету') {
         console.log(`🎯 [РЕДАКТИРОВАНИЕ] Выбор типа для редактирования: ${text}`);
         const result = await startHandler.handleEditChoice(context, vk, text);
@@ -217,10 +217,6 @@ async function handleMessage(context) {
         await startHandler.handleDeleteProfile(context, vk);
         return;
     }
-    if (text === '👑 Админ-панель') {
-        await adminPanel.showAdminPanel(context);
-        return;
-    }
     if (text === '/start' || text === '/меню') {
         await startHandler.handleStart(context, vk);
         return;
@@ -254,6 +250,13 @@ async function handleMessage(context) {
         return;
     }
     if (text === '💬 Перейти в чат') {
+        const allChats = await db.getAllChats();
+        for (const chat of allChats) {
+            if (parseInt(chat.is_active) === 1 && (chat.user1_vk == userId || chat.user2_vk == userId)) {
+                await chatHandler.enterChat(context, vk, { chatId: chat.id });
+                return;
+            }
+        }
         await chatHandler.enterChat(context, vk);
         return;
     }
@@ -366,7 +369,8 @@ async function handleMessage(context) {
                 await db.createMatch(currentUser.id, firstLiker.id, 'public');
             } else {
                 const matchId = await db.createMatch(currentUser.id, firstLiker.id, 'anon');
-                await db.createChat(matchId);
+                const chatId = await db.createChat(matchId);
+                
                 const matchKeyboard = JSON.stringify({
                     one_time: true,
                     buttons: [
@@ -374,9 +378,11 @@ async function handleMessage(context) {
                         [{ action: { type: "text", label: "🔙 В главное меню" }, color: "secondary" }]
                     ]
                 });
+                
                 await context.send(`💕 ВЗАИМНАЯ СИМПАТИЯ! 💕\n\nУ вас анонимный мэтч! Нажми "Перейти в чат" чтобы начать общение.`, {
                     keyboard: matchKeyboard
                 });
+                
                 await vk.api.messages.send({
                     user_id: firstLikerId,
                     message: `💕 ВЗАИМНАЯ СИМПАТИЯ! 💕\n\nУ вас анонимный мэтч! Нажми "Перейти в чат" чтобы начать общение.`,
