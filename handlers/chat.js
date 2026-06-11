@@ -68,14 +68,11 @@ async function enterChat(context, vk, matchData = null) {
     // Если не нашли, ищем активный чат пользователя
     if (!chat) {
         const allChats = await db.getAllChats();
-        console.log(`Поиск активного чата для пользователя ${userId}`);
         for (const c of allChats) {
             const isActive = parseInt(c.is_active);
-            console.log(`Чат ${c.id}: is_active=${isActive}, user1_vk=${c.user1_vk}, user2_vk=${c.user2_vk}`);
             if (isActive === 1 && (c.user1_vk == userId || c.user2_vk == userId)) {
                 chat = c;
                 match = await db.getMatchByChatId(chat.id);
-                console.log(`Найден чат: id=${chat.id}, match_id=${chat.match_id}`);
                 break;
             }
         }
@@ -289,6 +286,11 @@ async function handleChatMessage(context, vk) {
             const docData = attach.doc || attach;
             attachmentToSend = `doc${docData.owner_id || docData.ownerId}_${docData.id}`;
             attachmentType = `📎 Файл: ${docData.title || 'документ'}`;
+        }
+        // Видео - игнорируем
+        else if (attach.type === 'video' || attach.video) {
+            await context.send('🎥 Видео не поддерживается в анонимном чате.');
+            return;
         }
         else {
             console.log('НЕИЗВЕСТНЫЙ ТИП:', attach.type);
