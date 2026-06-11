@@ -19,11 +19,6 @@ const EditSteps = {
     EDIT_SEARCH_GENDER: 'edit_search_gender'
 };
 
-// Состояния для удаления анкеты
-const DeleteSteps = {
-    CHOOSE_TYPE: 'delete_choose_type'
-};
-
 // Функция для получения главной клавиатуры (с админ-кнопкой или без)
 function getMainKeyboard(userId) {
     if (userId == config.adminId) {

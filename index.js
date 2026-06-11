@@ -298,7 +298,7 @@ async function handleMessage(context) {
                 await db.createMatch(currentUser.id, firstLiker.id, 'public');
             } else {
                 const matchId = await db.createMatch(currentUser.id, firstLiker.id, 'anon');
-                const chatId = await db.createChat(matchId);
+                await db.createChat(matchId);
                 
                 const matchKeyboard = JSON.stringify({
                     one_time: true,
@@ -338,7 +338,7 @@ async function handleMessage(context) {
         return;
     }
     
-    // ========== ОБРАБОТКА СОЗДАНИЯ АНКЕТЫ ==========
+    // ========== ОБРАБОТКА СОЗДАНИЯ АНКЕТЫ (ВАЖНО: ДО ОСНОВНЫХ КНОПОК) ==========
     const profileState = startHandler.userStates.get(userId);
     if (profileState && !editState) {
         const step = profileState.step;
