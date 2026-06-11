@@ -41,7 +41,6 @@ async function startBot() {
         console.log(`✅ Бот "${groupName}" запущен!`);
         console.log(`📊 Админ ID: ${config.adminId}`);
         
-        // ========== ВЕБ-СЕРВЕР ДЛЯ RENDER ==========
         app.get('/', (req, res) => {
             res.send('✅ VK Bot is alive!');
         });
@@ -49,7 +48,6 @@ async function startBot() {
         app.listen(PORT, () => {
             console.log(`🌐 Веб-сервер запущен на порту ${PORT}`);
         });
-        // ========== КОНЕЦ ВЕБ-СЕРВЕРА ==========
         
         vk.updates.on('message_new', async (context) => {
             await handleMessage(context);
@@ -71,13 +69,23 @@ async function handleMessage(context) {
     const userId = context.senderId;
     const text = context.text || '';
     
+    console.log(`📨 [НОВОЕ СООБЩЕНИЕ] От ${userId}: "${text}"`);
+    
     const user = await db.getUserByVkId(userId);
     if (user && user.is_banned === 1) {
         await context.send('🚫 Ваш аккаунт заблокирован в боте.');
         return;
     }
     
-    // ========== ОБРАБОТКА АДМИН-ПАНЕЛИ (КНОПКИ) ==========
+    // ========== ВАЖНО: СНАЧАЛА ОБРАБАТЫВАЕМ КНОПКИ ВЫБОРА ТИПА АНКЕТЫ ==========
+    // Эти кнопки появляются при создании и редактировании анкеты
+    if (text === '📋 Обычная анкета' || text === '🔞 Анонимную анкету') {
+        console.log(`🎯 [ОБРАБОТКА] Кнопка выбора типа анкеты: ${text}`);
+        const result = await startHandler.handleEditChoice(context, vk, text);
+        if (result) return;
+    }
+    
+    // ========== ОБРАБОТКА АДМИН-ПАНЕЛИ ==========
     if (userId == config.adminId) {
         const adminState = adminPanel.adminStates.get(userId);
         
@@ -159,12 +167,6 @@ async function handleMessage(context) {
     }
     
     // ========== ОБРАБОТКА РЕДАКТИРОВАНИЯ АНКЕТЫ ==========
-    
-    if (text === '📋 Обычную анкету' || text === '🔞 Анонимную анкету') {
-        const result = await startHandler.handleEditChoice(context, vk, text);
-        if (result) return;
-    }
-    
     if (text === '✏️ Редактировать анкету') {
         await startHandler.handleEditProfile(context, vk);
         return;
@@ -338,7 +340,7 @@ async function handleMessage(context) {
         return;
     }
     
-    // ========== ОБРАБОТКА СОЗДАНИЯ АНКЕТЫ (ВАЖНО: ДО ОСНОВНЫХ КНОПОК) ==========
+    // ========== ОБРАБОТКА СОЗДАНИЯ АНКЕТЫ ==========
     const profileState = startHandler.userStates.get(userId);
     if (profileState && !editState) {
         const step = profileState.step;
