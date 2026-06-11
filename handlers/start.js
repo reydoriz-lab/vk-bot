@@ -5,7 +5,14 @@ const FormData = require('form-data');
 const config = require('../config');
 const keyboards = require('../keyboards');
 
+// Хранилище для РЕДАКТИРОВАНИЯ анкеты
 const editStates = new Map();
+
+// Хранилище для УДАЛЕНИЯ анкеты
+const deleteStates = new Map();
+
+// Хранилище для СОЗДАНИЯ анкеты (используется в profile.js)
+const userStates = new Map();
 
 const EditSteps = {
     CHOOSE_FIELD: 'choose_field',
@@ -558,7 +565,6 @@ async function handleEditSearchGender(context, vk, text) {
 async function handleEditChoice(context, vk, text) {
     const userId = context.senderId;
     
-    // Обработка выбора типа анкеты для РЕДАКТИРОВАНИЯ
     if (text === '✏️ Обычную анкету') {
         const user = await db.getUserByVkId(userId);
         const profile = await db.getProfileByUserIdAndType(user.id, 'public');
@@ -630,7 +636,6 @@ async function handleDeleteProfile(context, vk, profileType = null) {
         return { action: 'deleted' };
     }
     
-    // Если тип указан, удаляем конкретную анкету
     const profile = await db.getProfileByUserIdAndType(user.id, profileType);
     if (profile) {
         await db.deleteProfile(profile.id);
@@ -666,5 +671,7 @@ module.exports = {
     handleDeleteProfile,
     handleEditChoice,
     editStates,
+    deleteStates,
+    userStates,
     EditSteps
 };
