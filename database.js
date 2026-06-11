@@ -105,6 +105,25 @@ async function initTables() {
 
 initTables().catch(console.error);
 
+// Сброс sequences после миграции
+async function resetSequences() {
+    try {
+        await pool.query(`SELECT setval('users_id_seq', (SELECT COALESCE(MAX(id), 1) FROM users))`);
+        await pool.query(`SELECT setval('profiles_id_seq', (SELECT COALESCE(MAX(id), 1) FROM profiles))`);
+        await pool.query(`SELECT setval('likes_id_seq', (SELECT COALESCE(MAX(id), 1) FROM likes))`);
+        await pool.query(`SELECT setval('matches_id_seq', (SELECT COALESCE(MAX(id), 1) FROM matches))`);
+        await pool.query(`SELECT setval('chats_id_seq', (SELECT COALESCE(MAX(id), 1) FROM chats))`);
+        await pool.query(`SELECT setval('chat_messages_id_seq', (SELECT COALESCE(MAX(id), 1) FROM chat_messages))`);
+        await pool.query(`SELECT setval('admin_logs_id_seq', (SELECT COALESCE(MAX(id), 1) FROM admin_logs))`);
+        await pool.query(`SELECT setval('user_logs_id_seq', (SELECT COALESCE(MAX(id), 1) FROM user_logs))`);
+        console.log('✅ Sequences сброшены');
+    } catch (err) {
+        console.error('Ошибка сброса sequences:', err.message);
+    }
+}
+
+resetSequences();
+
 module.exports = {
     addUser: async (vk_id, name) => {
         const result = await pool.query(
