@@ -229,7 +229,7 @@ async function handleMessage(context) {
         await startHandler.handleDeleteProfile(context, vk);
         return;
     }
-    if (text === '/start' || text === '/меню') {
+    if (text === '/start' || text === '/меню' || text === 'Начать' || text === 'Start') {
         await startHandler.handleStart(context, vk);
         return;
     }
