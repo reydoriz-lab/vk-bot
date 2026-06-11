@@ -391,10 +391,6 @@ async function handleMessage(context) {
         await startHandler.handleMyProfile(context, vk);
         return;
     }
-    if (text === '✏️ Создать анкету') {
-        await profileHandler.handleCreateProfile(context, vk);
-        return;
-    }
     if (text === '❤️ Лайк') {
         await searchHandler.handleLike(context, vk);
         return;
@@ -417,6 +413,10 @@ async function handleMessage(context) {
     }
     if (text === '💬 Мои чаты') {
         await chatHandler.handleMyChats(context, vk);
+        return;
+    }
+    if (text === '✏️ Создать анкету') {
+        await profileHandler.handleCreateProfile(context, vk);
         return;
     }
     if (text === '🔙 Назад в меню' || text === '🔙 В главное меню' || text === '🔙 Назад в админку') {
