@@ -195,6 +195,13 @@ async function handleMyProfile(context, vk) {
 
 async function handleEditProfile(context, vk) {
     const userId = context.senderId;
+    
+    // ОЧИЩАЕМ СОСТОЯНИЕ УДАЛЕНИЯ, ЕСЛИ ОНО БЫЛО
+    const state = userStates.get(userId);
+    if (state && state.step === 'delete_choose_type') {
+        userStates.delete(userId);
+    }
+    
     const user = await db.getUserByVkId(userId);
     
     if (!user) {
@@ -619,6 +626,12 @@ async function handleDeleteProfile(context, vk, profileType = null) {
     const userId = context.senderId;
     console.log(`🗑 DELETE PROFILE CALLED: userId=${userId}, profileType=${profileType}`);
     
+    // ОЧИЩАЕМ СОСТОЯНИЕ РЕДАКТИРОВАНИЯ, ЕСЛИ ОНО БЫЛО
+    const editState = userStates.get(userId);
+    if (editState && editState.step === EditSteps.CHOOSE_FIELD) {
+        userStates.delete(userId);
+    }
+    
     const user = await db.getUserByVkId(userId);
     
     if (!user) {
@@ -660,6 +673,9 @@ async function handleDeleteProfile(context, vk, profileType = null) {
         } else {
             await context.send('❌ У тебя нет анкет для удаления', { keyboard: getMainKeyboard(userId) });
         }
+        
+        // Очищаем состояние удаления
+        userStates.delete(userId);
         return { action: 'deleted' };
     }
     
