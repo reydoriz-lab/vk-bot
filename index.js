@@ -78,7 +78,7 @@ async function handleMessage(context) {
     
     // ========== СНАЧАЛА ПРОВЕРЯЕМ СОСТОЯНИЯ СОЗДАНИЯ АНКЕТЫ ==========
     const profileState = startHandler.userStates.get(userId);
-    const editState = startHandler.userStates.get(userId); // временно, для совместимости
+    const editState = startHandler.userStates.get(userId);
     
     if (profileState && profileState.step === profileHandler.ProfileSteps.CHOOSE_GENDER) {
         console.log(`🎯 [ОБРАБОТКА] CHOOSE_GENDER, текст: ${text}`);
@@ -121,10 +121,21 @@ async function handleMessage(context) {
         }
     }
     
-    // ========== ВАЖНО: ОБРАБАТЫВАЕМ КНОПКИ ВЫБОРА ТИПА АНКЕТЫ ==========
+    // ========== ОБРАБАТЫВАЕМ КНОПКИ ВЫБОРА ТИПА АНКЕТЫ ==========
     if (text === '📋 Обычная анкета' || text === '🔞 Анонимная анкета') {
-        console.log(`🎯 [ОБРАБОТКА] Кнопка выбора типа для СОЗДАНИЯ анкеты: ${text}`);
+        console.log(`🎯 [ОБРАБОТКА] Кнопка выбора типа: ${text}`);
         
+        // Проверяем, в каком мы режиме (удаление или редактирование)
+        const deleteState = startHandler.userStates.get(userId);
+        
+        // Если состояние ожидания выбора типа для удаления
+        if (deleteState && deleteState.step === 'delete_choose_type') {
+            console.log(`🗑 [УДАЛЕНИЕ] Удаляем анкету типа: ${text === '📋 Обычная анкета' ? 'public' : 'anon'}`);
+            await startHandler.handleDeleteProfile(context, vk, text === '📋 Обычная анкета' ? 'public' : 'anon');
+            return;
+        }
+        
+        // Иначе проверяем создание или редактирование
         const profileStateCheck = startHandler.userStates.get(userId);
         if (profileStateCheck && profileStateCheck.step === profileHandler.ProfileSteps.CHOOSE_TYPE) {
             console.log(`✅ [СОЗДАНИЕ] Передаём в profileHandler.handleProfileTypeChoice`);

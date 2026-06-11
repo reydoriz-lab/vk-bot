@@ -617,6 +617,8 @@ async function handleEditChoice(context, vk, text) {
 
 async function handleDeleteProfile(context, vk, profileType = null) {
     const userId = context.senderId;
+    console.log(`🗑 DELETE PROFILE CALLED: userId=${userId}, profileType=${profileType}`);
+    
     const user = await db.getUserByVkId(userId);
     
     if (!user) {
@@ -629,11 +631,16 @@ async function handleDeleteProfile(context, vk, profileType = null) {
         const publicProfile = await db.getProfileByUserIdAndType(user.id, 'public');
         const anonProfile = await db.getProfileByUserIdAndType(user.id, 'anon');
         
+        console.log(`📊 Профили: public=${!!publicProfile}, anon=${!!anonProfile}`);
+        
         if (publicProfile && anonProfile) {
+            // Устанавливаем состояние, что мы в режиме выбора типа для удаления
+            userStates.set(userId, { step: 'delete_choose_type' });
+            
             const deleteKeyboard = JSON.stringify({
                 one_time: true,
                 buttons: [
-                    [{ action: { type: "text", label: "🗑 Обычную анкету" }, color: "primary" }],
+                    [{ action: { type: "text", label: "📋 Обычную анкету" }, color: "primary" }],
                     [{ action: { type: "text", label: "🔞 Анонимную анкету" }, color: "primary" }],
                     [{ action: { type: "text", label: "🔙 Назад" }, color: "secondary" }]
                 ]
@@ -665,6 +672,9 @@ async function handleDeleteProfile(context, vk, profileType = null) {
     } else {
         await context.send('❌ Анкета не найдена', { keyboard: getMainKeyboard(userId) });
     }
+    
+    // Очищаем состояние после удаления
+    userStates.delete(userId);
     
     return { action: 'deleted' };
 }
