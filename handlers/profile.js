@@ -113,6 +113,37 @@ async function handleCreateProfile(context, vk) {
         return { action: 'max_profiles' };
     }
     
+    // Проверяем, есть ли уже одна анкета
+    if (publicProfile || anonProfile) {
+        const existingType = publicProfile ? 'public' : 'anon';
+        const existingTypeText = publicProfile ? 'обычная' : 'анонимная';
+        
+        // Если есть одна анкета, предлагаем создать только недостающую
+        const newType = publicProfile ? 'anon' : 'public';
+        const newTypeText = publicProfile ? 'анонимную' : 'обычную';
+        
+        console.log(`📝 [СОЗДАНИЕ АНКЕТЫ] У пользователя ${userId} есть ${existingTypeText} анкета, создаём ${newTypeText}`);
+        
+        // Сразу устанавливаем тип и переходим к следующему шагу
+        userStates.set(userId, {
+            step: ProfileSteps.CHOOSE_GENDER,
+            tempData: { type: newType }
+        });
+        
+        await context.send('👤 Укажи свой пол:', {
+            keyboard: JSON.stringify({
+                one_time: true,
+                buttons: [
+                    [{ action: { type: "text", label: "👨 Мужской" }, color: "primary" }],
+                    [{ action: { type: "text", label: "👩 Женский" }, color: "primary" }]
+                ]
+            })
+        });
+        
+        return { action: 'profile_creation_started' };
+    }
+    
+    // Если нет ни одной анкеты
     userStates.set(userId, {
         step: ProfileSteps.CHOOSE_TYPE,
         tempData: {}
@@ -305,7 +336,6 @@ async function handleCityInput(context, vk, text) {
     
     if (!state || state.step !== ProfileSteps.ENTER_CITY) return false;
     
-    // Базовая валидация города
     const cityRegex = /^[а-яА-ЯёЁ\s\-\.]+$/;
     
     if (!cityRegex.test(text)) {
@@ -320,7 +350,6 @@ async function handleCityInput(context, vk, text) {
         return { action: 'city_invalid' };
     }
     
-    // Приводим к нормальному виду
     const normalizedCity = text.charAt(0).toUpperCase() + text.slice(1).toLowerCase();
     
     state.tempData.city = normalizedCity;
@@ -413,7 +442,6 @@ async function handlePhotoUpload(context, vk) {
             })
         });
         
-        // Отправляем фото отдельным сообщением
         await vk.api.messages.send({
             user_id: userId,
             attachment: state.tempData.photo,
