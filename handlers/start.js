@@ -5,13 +5,9 @@ const FormData = require('form-data');
 const config = require('../config');
 const keyboards = require('../keyboards');
 
-// Разные хранилища для разных процессов
-const editStates = new Map();      // для редактирования
-const deleteStates = new Map();     // для удаления
+const editStates = new Map();
 
-// Состояния для редактирования анкеты
 const EditSteps = {
-    CHOOSE_ANON_PUBLIC: 'choose_anon_public',
     CHOOSE_FIELD: 'choose_field',
     EDIT_NAME: 'edit_name',
     EDIT_AGE: 'edit_age',
@@ -21,7 +17,6 @@ const EditSteps = {
     EDIT_SEARCH_GENDER: 'edit_search_gender'
 };
 
-// Функция для получения главной клавиатуры (с админ-кнопкой или без)
 function getMainKeyboard(userId) {
     if (userId == config.adminId) {
         return JSON.stringify(keyboards.adminButton);
@@ -68,11 +63,7 @@ async function handleStart(context, vk) {
     return { action: 'menu_shown' };
 }
 
-// Функция для перезагрузки фото с 5 попытками
 async function reloadPhoto(vk, photoUrl) {
-    let success = false;
-    let lastError = null;
-    
     for (let attempt = 1; attempt <= 5; attempt++) {
         try {
             console.log(`Перезагрузка фото, попытка ${attempt}/5, URL:`, photoUrl);
@@ -99,16 +90,12 @@ async function reloadPhoto(vk, photoUrl) {
                 return `photo${savedPhoto[0].owner_id}_${savedPhoto[0].id}`;
             }
         } catch (err) {
-            lastError = err;
             console.error(`Попытка ${attempt}/5 не удалась:`, err.message);
             if (attempt < 5) {
-                console.log(`Ждём 3 секунды перед повтором...`);
                 await new Promise(resolve => setTimeout(resolve, 3000));
             }
         }
     }
-    
-    console.error('Ошибка перезагрузки фото после 5 попыток:', lastError?.message);
     return null;
 }
 
@@ -131,7 +118,6 @@ async function handleMyProfile(context, vk) {
         return { action: 'no_profiles' };
     }
     
-    // Отправляем обычную анкету
     if (publicProfile) {
         let message = `🔹 Обычная анкета:\n`;
         message += `📝 Имя: ${publicProfile.name}\n`;
@@ -155,7 +141,6 @@ async function handleMyProfile(context, vk) {
         }
     }
     
-    // Отправляем анонимную анкету
     if (anonProfile) {
         let message = `🔞 Анонимная анкета:\n`;
         message += `📝 Имя: ${anonProfile.name}\n`;
@@ -197,7 +182,6 @@ async function handleMyProfile(context, vk) {
 
 async function handleEditProfile(context, vk) {
     const userId = context.senderId;
-    
     const user = await db.getUserByVkId(userId);
     
     if (!user) {
@@ -208,13 +192,12 @@ async function handleEditProfile(context, vk) {
     const publicProfile = await db.getProfileByUserIdAndType(user.id, 'public');
     const anonProfile = await db.getProfileByUserIdAndType(user.id, 'anon');
     
-    // Если есть обе анкеты, спрашиваем какую редактировать
     if (publicProfile && anonProfile) {
         const chooseKeyboard = JSON.stringify({
             one_time: true,
             buttons: [
-                [{ action: { type: "text", label: "📋 Обычную анкету" }, color: "primary" }],
-                [{ action: { type: "text", label: "🔞 Анонимную анкету" }, color: "primary" }],
+                [{ action: { type: "text", label: "✏️ Обычную анкету" }, color: "primary" }],
+                [{ action: { type: "text", label: "✏️ Анонимную анкету" }, color: "primary" }],
                 [{ action: { type: "text", label: "🔙 Назад" }, color: "secondary" }]
             ]
         });
@@ -451,15 +434,9 @@ async function handleEditPhoto(context, vk) {
         if (attach.ownerId && attach.id && attach.albumId === -3) {
             if (attach.sizes && attach.sizes.length > 0) {
                 const photoUrl = attach.sizes[attach.sizes.length - 1].url;
-                console.log('URL фото для перезагрузки:', photoUrl);
-                
-                let success = false;
-                let lastError = null;
                 
                 for (let attempt = 1; attempt <= 5; attempt++) {
                     try {
-                        console.log(`Попытка ${attempt}/5: перезагрузка фото...`);
-                        
                         const fileStream = await helpers.downloadFile(photoUrl);
                         const uploadServer = await vk.api.photos.getMessagesUploadServer();
                         
@@ -479,24 +456,12 @@ async function handleEditPhoto(context, vk) {
                         
                         if (savedPhoto && savedPhoto[0]) {
                             photoAttachment = `photo${savedPhoto[0].owner_id}_${savedPhoto[0].id}`;
-                            console.log(`Попытка ${attempt}/5: фото успешно перезагружено`);
-                            success = true;
                             break;
                         }
                     } catch (err) {
-                        lastError = err;
                         console.error(`Попытка ${attempt}/5 не удалась:`, err.message);
-                        if (attempt < 5) {
-                            console.log(`Ждём 3 секунды перед повтором...`);
-                            await new Promise(resolve => setTimeout(resolve, 3000));
-                        }
+                        if (attempt < 5) await new Promise(resolve => setTimeout(resolve, 3000));
                     }
-                }
-                
-                if (!success) {
-                    console.error('Ошибка перезагрузки фото после 5 попыток:', lastError?.message);
-                    await context.send('❌ Не удалось обработать фото. Пожалуйста, попробуй другое изображение или повтори позже.');
-                    return { action: 'photo_invalid' };
                 }
             }
         }
@@ -593,25 +558,32 @@ async function handleEditSearchGender(context, vk, text) {
 async function handleEditChoice(context, vk, text) {
     const userId = context.senderId;
     
-    console.log(`handleEditChoice: text="${text}", userId=${userId}`);
-    
-    if (text === '📋 Обычную анкету') {
-        console.log('Выбрана обычная анкета');
-        editStates.set(userId, {
-            step: EditSteps.CHOOSE_FIELD,
-            editType: 'public'
-        });
-        await showEditFieldMenu(context, 'public');
+    // Обработка выбора типа анкеты для РЕДАКТИРОВАНИЯ
+    if (text === '✏️ Обычную анкету') {
+        const user = await db.getUserByVkId(userId);
+        const profile = await db.getProfileByUserIdAndType(user.id, 'public');
+        if (profile) {
+            editStates.set(userId, {
+                step: EditSteps.CHOOSE_FIELD,
+                editType: 'public',
+                profile: profile
+            });
+            await showEditFieldMenu(context, 'public');
+        }
         return true;
     }
     
-    if (text === '🔞 Анонимную анкету') {
-        console.log('Выбрана анонимная анкета');
-        editStates.set(userId, {
-            step: EditSteps.CHOOSE_FIELD,
-            editType: 'anon'
-        });
-        await showEditFieldMenu(context, 'anon');
+    if (text === '✏️ Анонимную анкету') {
+        const user = await db.getUserByVkId(userId);
+        const profile = await db.getProfileByUserIdAndType(user.id, 'anon');
+        if (profile) {
+            editStates.set(userId, {
+                step: EditSteps.CHOOSE_FIELD,
+                editType: 'anon',
+                profile: profile
+            });
+            await showEditFieldMenu(context, 'anon');
+        }
         return true;
     }
     
@@ -620,8 +592,6 @@ async function handleEditChoice(context, vk, text) {
 
 async function handleDeleteProfile(context, vk, profileType = null) {
     const userId = context.senderId;
-    console.log(`🗑 DELETE PROFILE CALLED: userId=${userId}, profileType=${profileType}`);
-    
     const user = await db.getUserByVkId(userId);
     
     if (!user) {
@@ -629,22 +599,16 @@ async function handleDeleteProfile(context, vk, profileType = null) {
         return { action: 'error' };
     }
     
-    // Если тип не указан, показываем выбор
     if (!profileType) {
         const publicProfile = await db.getProfileByUserIdAndType(user.id, 'public');
         const anonProfile = await db.getProfileByUserIdAndType(user.id, 'anon');
         
-        console.log(`📊 Профили: public=${!!publicProfile}, anon=${!!anonProfile}`);
-        
         if (publicProfile && anonProfile) {
-            // Устанавливаем состояние для удаления
-            deleteStates.set(userId, { step: 'delete_choose_type' });
-            
             const deleteKeyboard = JSON.stringify({
                 one_time: true,
                 buttons: [
                     [{ action: { type: "text", label: "🗑 Обычную анкету" }, color: "primary" }],
-                    [{ action: { type: "text", label: "🔞 Анонимную анкету" }, color: "primary" }],
+                    [{ action: { type: "text", label: "🗑 Анонимную анкету" }, color: "primary" }],
                     [{ action: { type: "text", label: "🔙 Назад" }, color: "secondary" }]
                 ]
             });
@@ -663,8 +627,6 @@ async function handleDeleteProfile(context, vk, profileType = null) {
         } else {
             await context.send('❌ У тебя нет анкет для удаления', { keyboard: getMainKeyboard(userId) });
         }
-        
-        deleteStates.delete(userId);
         return { action: 'deleted' };
     }
     
@@ -677,8 +639,6 @@ async function handleDeleteProfile(context, vk, profileType = null) {
     } else {
         await context.send('❌ Анкета не найдена', { keyboard: getMainKeyboard(userId) });
     }
-    
-    deleteStates.delete(userId);
     
     return { action: 'deleted' };
 }
@@ -705,7 +665,6 @@ module.exports = {
     handleEditSearchGender,
     handleDeleteProfile,
     handleEditChoice,
-    editStates,      // экспортируем editStates
-    deleteStates,    // экспортируем deleteStates
+    editStates,
     EditSteps
 };

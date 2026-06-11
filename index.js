@@ -76,79 +76,45 @@ async function handleMessage(context) {
         return;
     }
     
-    // ========== СНАЧАЛА ПРОВЕРЯЕМ СОСТОЯНИЯ СОЗДАНИЯ АНКЕТЫ (profile.js) ==========
-    const createState = startHandler.userStates.get(userId);
-    
-    if (createState && createState.step === profileHandler.ProfileSteps.CHOOSE_GENDER) {
-        console.log(`🎯 [ОБРАБОТКА] CHOOSE_GENDER, текст: ${text}`);
-        const result = await profileHandler.handleGenderChoice(context, vk, text);
+    // ========== ОБРАБОТКА КНОПОК РЕДАКТИРОВАНИЯ (СПЕЦИАЛЬНЫЕ) ==========
+    if (text === '✏️ Обычную анкету' || text === '✏️ Анонимную анкету') {
+        console.log(`🎯 [РЕДАКТИРОВАНИЕ] Выбор типа для редактирования: ${text}`);
+        const result = await startHandler.handleEditChoice(context, vk, text);
         if (result) return;
     }
     
-    if (createState && createState.step === profileHandler.ProfileSteps.CHOOSE_SEARCH_GENDER) {
-        console.log(`🎯 [ОБРАБОТКА] CHOOSE_SEARCH_GENDER, текст: ${text}`);
-        const result = await profileHandler.handleSearchGenderChoice(context, vk, text);
-        if (result) return;
+    // ========== ОБРАБОТКА КНОПОК УДАЛЕНИЯ ==========
+    if (text === '🗑 Обычную анкету') {
+        console.log(`🗑 [УДАЛЕНИЕ] Удаляем обычную анкету`);
+        await startHandler.handleDeleteProfile(context, vk, 'public');
+        return;
+    }
+    if (text === '🗑 Анонимную анкету') {
+        console.log(`🗑 [УДАЛЕНИЕ] Удаляем анонимную анкету`);
+        await startHandler.handleDeleteProfile(context, vk, 'anon');
+        return;
     }
     
-    if (createState && createState.step === profileHandler.ProfileSteps.ENTER_NAME) {
-        console.log(`🎯 [ОБРАБОТКА] ENTER_NAME, текст: ${text}`);
-        const result = await profileHandler.handleNameInput(context, vk, text);
-        if (result) return;
-    }
-    
-    if (createState && createState.step === profileHandler.ProfileSteps.ENTER_AGE) {
-        console.log(`🎯 [ОБРАБОТКА] ENTER_AGE, текст: ${text}`);
-        const result = await profileHandler.handleAgeInput(context, vk, text);
-        if (result) return;
-    }
-    
-    if (createState && createState.step === profileHandler.ProfileSteps.ENTER_CITY) {
-        console.log(`🎯 [ОБРАБОТКА] ENTER_CITY, текст: ${text}`);
-        const result = await profileHandler.handleCityInput(context, vk, text);
-        if (result) return;
-    }
-    
-    if (createState && createState.step === profileHandler.ProfileSteps.UPLOAD_PHOTO) {
-        console.log(`🎯 [ОБРАБОТКА] UPLOAD_PHOTO`);
-        if (context.attachments && context.attachments.length > 0) {
-            const result = await profileHandler.handlePhotoUpload(context, vk);
-            if (result) return;
-        } else {
-            await context.send('📸 Пожалуйста, отправь фото. Если передумал(а) - напиши "отмена"');
-            return;
-        }
-    }
-    
-    // ========== ПРОВЕРЯЕМ СОСТОЯНИЯ РЕДАКТИРОВАНИЯ (editStates) ==========
+    // ========== СОСТОЯНИЯ РЕДАКТИРОВАНИЯ ==========
     const editState = startHandler.editStates.get(userId);
     
     if (editState && editState.step === startHandler.EditSteps.CHOOSE_FIELD) {
-        console.log(`🎯 [РЕДАКТИРОВАНИЕ] CHOOSE_FIELD, текст: ${text}`);
         const result = await startHandler.handleEditFieldChoice(context, vk, text);
         if (result) return;
     }
-    
     if (editState && editState.step === startHandler.EditSteps.EDIT_NAME) {
-        console.log(`🎯 [РЕДАКТИРОВАНИЕ] EDIT_NAME, текст: ${text}`);
         const result = await startHandler.handleEditName(context, vk, text);
         if (result) return;
     }
-    
     if (editState && editState.step === startHandler.EditSteps.EDIT_AGE) {
-        console.log(`🎯 [РЕДАКТИРОВАНИЕ] EDIT_AGE, текст: ${text}`);
         const result = await startHandler.handleEditAge(context, vk, text);
         if (result) return;
     }
-    
     if (editState && editState.step === startHandler.EditSteps.EDIT_CITY) {
-        console.log(`🎯 [РЕДАКТИРОВАНИЕ] EDIT_CITY, текст: ${text}`);
         const result = await startHandler.handleEditCity(context, vk, text);
         if (result) return;
     }
-    
     if (editState && editState.step === startHandler.EditSteps.EDIT_PHOTO) {
-        console.log(`🎯 [РЕДАКТИРОВАНИЕ] EDIT_PHOTO`);
         if (context.attachments && context.attachments.length > 0) {
             const result = await startHandler.handleEditPhoto(context, vk);
             if (result) return;
@@ -157,43 +123,12 @@ async function handleMessage(context) {
             return;
         }
     }
-    
     if (editState && editState.step === startHandler.EditSteps.EDIT_GENDER) {
-        console.log(`🎯 [РЕДАКТИРОВАНИЕ] EDIT_GENDER, текст: ${text}`);
         const result = await startHandler.handleEditGender(context, vk, text);
         if (result) return;
     }
-    
     if (editState && editState.step === startHandler.EditSteps.EDIT_SEARCH_GENDER) {
-        console.log(`🎯 [РЕДАКТИРОВАНИЕ] EDIT_SEARCH_GENDER, текст: ${text}`);
         const result = await startHandler.handleEditSearchGender(context, vk, text);
-        if (result) return;
-    }
-    
-    // ========== ОБРАБАТЫВАЕМ КНОПКИ ВЫБОРА ТИПА АНКЕТЫ ==========
-    if (text === '📋 Обычная анкета' || text === '🔞 Анонимная анкета') {
-        console.log(`🎯 [ОБРАБОТКА] Кнопка выбора типа: ${text}`);
-        
-        // Проверяем режим удаления
-        const deleteState = startHandler.deleteStates.get(userId);
-        
-        // Если состояние ожидания выбора типа для удаления
-        if (deleteState && deleteState.step === 'delete_choose_type') {
-            console.log(`🗑 [УДАЛЕНИЕ] Удаляем анкету типа: ${text === '📋 Обычная анкета' ? 'public' : 'anon'}`);
-            await startHandler.handleDeleteProfile(context, vk, text === '📋 Обычная анкета' ? 'public' : 'anon');
-            return;
-        }
-        
-        // Проверяем режим создания
-        if (createState && createState.step === profileHandler.ProfileSteps.CHOOSE_TYPE) {
-            console.log(`✅ [СОЗДАНИЕ] Передаём в profileHandler.handleProfileTypeChoice`);
-            const result = await profileHandler.handleProfileTypeChoice(context, vk, text);
-            if (result) return;
-        }
-        
-        // Если не удаление и не создание — значит редактирование
-        console.log(`✏️ [РЕДАКТИРОВАНИЕ] Передаём в startHandler.handleEditChoice`);
-        const result = await startHandler.handleEditChoice(context, vk, text);
         if (result) return;
     }
     
@@ -251,166 +186,45 @@ async function handleMessage(context) {
             await adminPanel.showAdminPanel(context);
             return;
         }
-        
         if (text === '📊 Статистика') {
             await adminPanel.showStats(context);
             return;
         }
-        
         if (text === '👥 Пользователи') {
             await adminPanel.showUsers(context, 0);
             return;
         }
-        
         if (text === '📋 Анкеты') {
             await adminPanel.showProfiles(context, 0);
             return;
         }
-        
         if (text === '🚫 Бан/Разбан') {
             await adminPanel.showBanMenu(context);
             return;
         }
-        
         if (text === '📢 Рассылка') {
             await adminPanel.showBroadcastMenu(context);
             return;
         }
     }
     
-    // ========== ОБРАБОТКА РЕДАКТИРОВАНИЯ АНКЕТЫ ==========
+    // ========== ОСНОВНЫЕ КНОПКИ ==========
     if (text === '✏️ Редактировать анкету') {
         await startHandler.handleEditProfile(context, vk);
         return;
     }
-    
-    // ========== ОБРАБОТКА УДАЛЕНИЯ АНКЕТЫ ==========
     if (text === '🗑 Удалить анкету') {
         await startHandler.handleDeleteProfile(context, vk);
         return;
     }
-    if (text === '🗑 Обычную анкету') {
-        await startHandler.handleDeleteProfile(context, vk, 'public');
+    if (text === '👑 Админ-панель') {
+        await adminPanel.showAdminPanel(context);
         return;
     }
-    if (text === '🔞 Анонимную анкету') {
-        await startHandler.handleDeleteProfile(context, vk, 'anon');
-        return;
-    }
-    
-    // ========== ОБРАБОТКА ВЗАИМНОГО ЛАЙКА ==========
-    if (text && text.startsWith('❤️ Взаимный лайк #')) {
-        const parts = text.split('#');
-        const firstLikerId = parseInt(parts[1]);
-        let likeType = null;
-        if (parts[2]) {
-            likeType = parts[2];
-        }
-        
-        console.log(`=== ВЗАИМНЫЙ ЛАЙК ===`);
-        console.log(`Текущий пользователь (кто отвечает): ${userId}`);
-        console.log(`Пользователь, который лайкнул первым: ${firstLikerId}`);
-        console.log(`Тип лайка из кнопки: ${likeType}`);
-        
-        const currentUser = await db.getUserByVkId(userId);
-        const firstLiker = await db.getUserByVkId(firstLikerId);
-        
-        if (!currentUser || !firstLiker) {
-            console.log('Пользователи не найдены');
-            await context.send('❌ Ошибка: пользователи не найдены');
-            return;
-        }
-        
-        let profileType = likeType;
-        let currentProfile = null;
-        
-        if (profileType === 'public') {
-            currentProfile = await db.getProfileByUserIdAndType(currentUser.id, 'public');
-        } else if (profileType === 'anon') {
-            currentProfile = await db.getProfileByUserIdAndType(currentUser.id, 'anon');
-        }
-        
-        if (!currentProfile) {
-            const currentPublicProfile = await db.getProfileByUserIdAndType(currentUser.id, 'public');
-            const currentAnonProfile = await db.getProfileByUserIdAndType(currentUser.id, 'anon');
-            currentProfile = currentPublicProfile || currentAnonProfile;
-            profileType = currentPublicProfile ? 'public' : 'anon';
-        }
-        
-        const firstLikerProfile = await db.getProfileByUserIdAndType(firstLiker.id, profileType);
-        
-        if (!currentProfile || !firstLikerProfile) {
-            console.log('Анкеты не найдены');
-            await context.send('❌ Ошибка: анкеты не найдены');
-            return;
-        }
-        
-        console.log(`Анкета текущего: id=${currentProfile.id}, type=${profileType}`);
-        console.log(`Анкета первого: id=${firstLikerProfile.id}`);
-        
-        await db.addLike(currentUser.id, firstLikerProfile.id, profileType);
-        console.log(`Лайк добавлен: пользователь ${currentUser.id} -> анкета ${firstLikerProfile.id}`);
-        
-        const likeCheck = await db.checkLikeDirect(firstLiker.id, currentProfile.id, profileType);
-        
-        console.log(`Лайк от первого (${firstLiker.id}) к анкете текущего (${currentProfile.id}): ${likeCheck ? 'ЕСТЬ' : 'НЕТ'}`);
-        
-        if (likeCheck) {
-            console.log('=== МЭТЧ! ===');
-            
-            if (profileType === 'public') {
-                await context.send(`💕 ВЗАИМНАЯ СИМПАТИЯ! 💕\n\nСсылка на страницу: vk.com/id${firstLikerId}\n\nМожешь написать человеку в личные сообщения!`);
-                
-                await vk.api.messages.send({
-                    user_id: firstLikerId,
-                    message: `💕 ВЗАИМНАЯ СИМПАТИЯ! 💕\n\nСсылка на страницу: vk.com/id${userId}\n\nМожешь написать человеку в личные сообщения!`,
-                    random_id: Math.floor(Math.random() * 1000000000)
-                });
-                
-                await db.createMatch(currentUser.id, firstLiker.id, 'public');
-            } else {
-                const matchId = await db.createMatch(currentUser.id, firstLiker.id, 'anon');
-                await db.createChat(matchId);
-                
-                const matchKeyboard = JSON.stringify({
-                    one_time: true,
-                    buttons: [
-                        [{ action: { type: "text", label: "💬 Перейти в чат" }, color: "primary" }],
-                        [{ action: { type: "text", label: "🔙 В главное меню" }, color: "secondary" }]
-                    ]
-                });
-                
-                await context.send(`💕 ВЗАИМНАЯ СИМПАТИЯ! 💕\n\nУ вас анонимный мэтч! Нажми "Перейти в чат" чтобы начать общение.`, {
-                    keyboard: matchKeyboard
-                });
-                
-                await vk.api.messages.send({
-                    user_id: firstLikerId,
-                    message: `💕 ВЗАИМНАЯ СИМПАТИЯ! 💕\n\nУ вас анонимный мэтч! Нажми "Перейти в чат" чтобы начать общение.`,
-                    keyboard: matchKeyboard,
-                    random_id: Math.floor(Math.random() * 1000000000)
-                });
-            }
-        } else {
-            console.log('Мэтча нет, ожидаем ответа');
-            await context.send(`✅ Ты поставил(а) взаимный лайк! Как только пользователь ответит - будет мэтч.`);
-        }
-        return;
-    }
-    
-    if (text === '👎 Отклонить') {
-        await context.send('👎 Ты отклонил(а) этот лайк.', {
-            keyboard: getMainKeyboard(userId)
-        });
-        return;
-    }
-    
     if (text === '/start' || text === '/меню') {
         await startHandler.handleStart(context, vk);
         return;
     }
-    
-    // ========== ОСНОВНЫЕ КНОПКИ МЕНЮ ==========
     if (text === '🔍 Обычный поиск') {
         await searchHandler.handlePublicSearch(context, vk);
         return;
@@ -421,6 +235,10 @@ async function handleMessage(context) {
     }
     if (text === '📋 Моя анкета') {
         await startHandler.handleMyProfile(context, vk);
+        return;
+    }
+    if (text === '✏️ Создать анкету') {
+        await profileHandler.handleCreateProfile(context, vk);
         return;
     }
     if (text === '❤️ Лайк') {
@@ -447,12 +265,133 @@ async function handleMessage(context) {
         await chatHandler.handleMyChats(context, vk);
         return;
     }
-    if (text === '✏️ Создать анкету') {
-        await profileHandler.handleCreateProfile(context, vk);
-        return;
-    }
     if (text === '🔙 Назад в меню' || text === '🔙 В главное меню' || text === '🔙 Назад в админку') {
         await context.send('🔙 Возвращаю в главное меню', {
+            keyboard: getMainKeyboard(userId)
+        });
+        return;
+    }
+    
+    // ========== ОБРАБОТКА СОЗДАНИЯ АНКЕТЫ (profile.js) ==========
+    const createState = startHandler.userStates.get(userId);
+    if (createState) {
+        const step = createState.step;
+        if (step === profileHandler.ProfileSteps.CHOOSE_TYPE) {
+            const result = await profileHandler.handleProfileTypeChoice(context, vk, text);
+            if (result) return;
+        }
+        else if (step === profileHandler.ProfileSteps.CHOOSE_GENDER) {
+            const result = await profileHandler.handleGenderChoice(context, vk, text);
+            if (result) return;
+        }
+        else if (step === profileHandler.ProfileSteps.CHOOSE_SEARCH_GENDER) {
+            const result = await profileHandler.handleSearchGenderChoice(context, vk, text);
+            if (result) return;
+        }
+        else if (step === profileHandler.ProfileSteps.ENTER_NAME) {
+            const result = await profileHandler.handleNameInput(context, vk, text);
+            if (result) return;
+        }
+        else if (step === profileHandler.ProfileSteps.ENTER_AGE) {
+            const result = await profileHandler.handleAgeInput(context, vk, text);
+            if (result) return;
+        }
+        else if (step === profileHandler.ProfileSteps.ENTER_CITY) {
+            const result = await profileHandler.handleCityInput(context, vk, text);
+            if (result) return;
+        }
+        else if (step === profileHandler.ProfileSteps.UPLOAD_PHOTO) {
+            if (context.attachments && context.attachments.length > 0) {
+                const result = await profileHandler.handlePhotoUpload(context, vk);
+                if (result) return;
+            } else {
+                await context.send('📸 Пожалуйста, отправь фото. Если передумал(а) - напиши "отмена"');
+                return;
+            }
+        }
+    }
+    
+    // ========== ОБРАБОТКА ВЗАИМНОГО ЛАЙКА ==========
+    if (text && text.startsWith('❤️ Взаимный лайк #')) {
+        const parts = text.split('#');
+        const firstLikerId = parseInt(parts[1]);
+        let likeType = null;
+        if (parts[2]) {
+            likeType = parts[2];
+        }
+        
+        const currentUser = await db.getUserByVkId(userId);
+        const firstLiker = await db.getUserByVkId(firstLikerId);
+        
+        if (!currentUser || !firstLiker) {
+            await context.send('❌ Ошибка: пользователи не найдены');
+            return;
+        }
+        
+        let profileType = likeType;
+        let currentProfile = null;
+        
+        if (profileType === 'public') {
+            currentProfile = await db.getProfileByUserIdAndType(currentUser.id, 'public');
+        } else if (profileType === 'anon') {
+            currentProfile = await db.getProfileByUserIdAndType(currentUser.id, 'anon');
+        }
+        
+        if (!currentProfile) {
+            const currentPublicProfile = await db.getProfileByUserIdAndType(currentUser.id, 'public');
+            const currentAnonProfile = await db.getProfileByUserIdAndType(currentUser.id, 'anon');
+            currentProfile = currentPublicProfile || currentAnonProfile;
+            profileType = currentPublicProfile ? 'public' : 'anon';
+        }
+        
+        const firstLikerProfile = await db.getProfileByUserIdAndType(firstLiker.id, profileType);
+        
+        if (!currentProfile || !firstLikerProfile) {
+            await context.send('❌ Ошибка: анкеты не найдены');
+            return;
+        }
+        
+        await db.addLike(currentUser.id, firstLikerProfile.id, profileType);
+        
+        const likeCheck = await db.checkLikeDirect(firstLiker.id, currentProfile.id, profileType);
+        
+        if (likeCheck) {
+            if (profileType === 'public') {
+                await context.send(`💕 ВЗАИМНАЯ СИМПАТИЯ! 💕\n\nСсылка на страницу: vk.com/id${firstLikerId}\n\nМожешь написать человеку в личные сообщения!`);
+                await vk.api.messages.send({
+                    user_id: firstLikerId,
+                    message: `💕 ВЗАИМНАЯ СИМПАТИЯ! 💕\n\nСсылка на страницу: vk.com/id${userId}\n\nМожешь написать человеку в личные сообщения!`,
+                    random_id: Math.floor(Math.random() * 1000000000)
+                });
+                await db.createMatch(currentUser.id, firstLiker.id, 'public');
+            } else {
+                const matchId = await db.createMatch(currentUser.id, firstLiker.id, 'anon');
+                await db.createChat(matchId);
+                const matchKeyboard = JSON.stringify({
+                    one_time: true,
+                    buttons: [
+                        [{ action: { type: "text", label: "💬 Перейти в чат" }, color: "primary" }],
+                        [{ action: { type: "text", label: "🔙 В главное меню" }, color: "secondary" }]
+                    ]
+                });
+                await context.send(`💕 ВЗАИМНАЯ СИМПАТИЯ! 💕\n\nУ вас анонимный мэтч! Нажми "Перейти в чат" чтобы начать общение.`, {
+                    keyboard: matchKeyboard
+                });
+                await vk.api.messages.send({
+                    user_id: firstLikerId,
+                    message: `💕 ВЗАИМНАЯ СИМПАТИЯ! 💕\n\nУ вас анонимный мэтч! Нажми "Перейти в чат" чтобы начать общение.`,
+                    keyboard: matchKeyboard,
+                    random_id: Math.floor(Math.random() * 1000000000)
+                });
+            }
+        } else {
+            await context.send(`✅ Ты поставил(а) взаимный лайк! Как только пользователь ответит - будет мэтч.`);
+        }
+        return;
+    }
+    
+    if (text === '👎 Отклонить') {
+        await context.send('👎 Ты отклонил(а) этот лайк.', {
             keyboard: getMainKeyboard(userId)
         });
         return;
