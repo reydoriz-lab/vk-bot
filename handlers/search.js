@@ -1,6 +1,7 @@
 const db = require('../database');
 
 const searchStates = new Map();
+const likeStates = new Map();
 
 async function handlePublicSearch(context, vk) {
     const userId = context.senderId;
@@ -171,7 +172,6 @@ async function showNextProfile(context, vk, userId) {
         });
     }
     
-    // Обновляем currentProfile в состоянии
     searchState.currentProfile = profile;
     searchStates.set(userId, searchState);
     
@@ -236,10 +236,16 @@ async function handleLike(context, vk) {
         }
         notificationMessage += `\nЧто делаем?`;
         
+        // Сохраняем информацию о лайке для ответа
+        likeStates.set(currentProfile.vk_id, {
+            fromUserId: userId,
+            likeType: type
+        });
+        
         const likeResponseKeyboard = JSON.stringify({
             one_time: true,
             buttons: [
-                [{ action: { type: "text", label: `❤️ Взаимный лайк #${userId}#${type}` }, color: "positive" }],
+                [{ action: { type: "text", label: "❤️ Взаимный лайк" }, color: "positive" }],
                 [{ action: { type: "text", label: "👎 Отклонить" }, color: "negative" }]
             ]
         });
@@ -313,12 +319,10 @@ async function handleLike(context, vk) {
             });
         }
         
-        // Очищаем состояние поиска после мэтча
         searchStates.delete(userId);
         return;
     }
     
-    // Переходим к следующей анкете
     const nextIndex = currentIndex + 1;
     if (nextIndex < profiles.length) {
         searchState.currentIndex = nextIndex;
@@ -354,7 +358,6 @@ async function handleDislike(context, vk) {
     
     const { profiles, currentIndex } = searchState;
     
-    // Переходим к следующей анкете
     const nextIndex = currentIndex + 1;
     if (nextIndex < profiles.length) {
         searchState.currentIndex = nextIndex;
@@ -390,5 +393,6 @@ module.exports = {
     handleLike,
     handleDislike,
     stopSearch,
-    searchStates
+    searchStates,
+    likeStates
 };

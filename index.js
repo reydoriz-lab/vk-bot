@@ -1,15 +1,3 @@
-async function startBot() {
-    // Принудительный сброс sequences при запуске
-    try {
-        await pool.query(`SELECT setval('chat_messages_id_seq', (SELECT COALESCE(MAX(id), 1) FROM chat_messages))`);
-        console.log('✅ Sequence chat_messages сброшен');
-    } catch (err) {
-        console.log('Ошибка сброса sequence:', err.message);
-    }
-    
-    // ... остальной код
-}
-
 const { VK } = require('vk-io');
 const express = require('express');
 const config = require('./config');
@@ -327,24 +315,33 @@ async function handleMessage(context) {
     }
     
     // ========== ОБРАБОТКА ВЗАИМНОГО ЛАЙКА ==========
-    if (text && text.startsWith('❤️ Взаимный лайк #')) {
-        const parts = text.split('#');
-        const firstLikerId = parseInt(parts[1]);
-        let likeType = null;
-        if (parts[2]) {
-            likeType = parts[2];
+    if (text === '❤️ Взаимный лайк') {
+        const likeState = searchHandler.likeStates.get(userId);
+        if (!likeState) {
+            await context.send('❌ Ошибка: не найден лайк для ответа');
+            return;
         }
+        
+        const firstLikerId = likeState.fromUserId;
+        const profileType = likeState.likeType;
+        searchHandler.likeStates.delete(userId);
+        
+        console.log(`=== ВЗАИМНЫЙ ЛАЙК ===`);
+        console.log(`Текущий пользователь (кто отвечает): ${userId}`);
+        console.log(`Пользователь, который лайкнул первым: ${firstLikerId}`);
+        console.log(`Тип лайка из хранилища: ${profileType}`);
         
         const currentUser = await db.getUserByVkId(userId);
         const firstLiker = await db.getUserByVkId(firstLikerId);
         
         if (!currentUser || !firstLiker) {
+            console.log('Пользователи не найдены');
             await context.send('❌ Ошибка: пользователи не найдены');
             return;
         }
         
-        let profileType = likeType;
         let currentProfile = null;
+        let currentProfileType = profileType;
         
         if (profileType === 'public') {
             currentProfile = await db.getProfileByUserIdAndType(currentUser.id, 'public');
@@ -356,28 +353,39 @@ async function handleMessage(context) {
             const currentPublicProfile = await db.getProfileByUserIdAndType(currentUser.id, 'public');
             const currentAnonProfile = await db.getProfileByUserIdAndType(currentUser.id, 'anon');
             currentProfile = currentPublicProfile || currentAnonProfile;
-            profileType = currentPublicProfile ? 'public' : 'anon';
+            currentProfileType = currentPublicProfile ? 'public' : 'anon';
         }
         
-        const firstLikerProfile = await db.getProfileByUserIdAndType(firstLiker.id, profileType);
+        const firstLikerProfile = await db.getProfileByUserIdAndType(firstLiker.id, currentProfileType);
         
         if (!currentProfile || !firstLikerProfile) {
+            console.log('Анкеты не найдены');
             await context.send('❌ Ошибка: анкеты не найдены');
             return;
         }
         
-        await db.addLike(currentUser.id, firstLikerProfile.id, profileType);
+        console.log(`Анкета текущего: id=${currentProfile.id}, type=${currentProfileType}`);
+        console.log(`Анкета первого: id=${firstLikerProfile.id}`);
         
-        const likeCheck = await db.checkLikeDirect(firstLiker.id, currentProfile.id, profileType);
+        await db.addLike(currentUser.id, firstLikerProfile.id, currentProfileType);
+        console.log(`Лайк добавлен: пользователь ${currentUser.id} -> анкета ${firstLikerProfile.id}`);
+        
+        const likeCheck = await db.checkLikeDirect(firstLiker.id, currentProfile.id, currentProfileType);
+        
+        console.log(`Лайк от первого (${firstLiker.id}) к анкете текущего (${currentProfile.id}): ${likeCheck ? 'ЕСТЬ' : 'НЕТ'}`);
         
         if (likeCheck) {
-            if (profileType === 'public') {
+            console.log('=== МЭТЧ! ===');
+            
+            if (currentProfileType === 'public') {
                 await context.send(`💕 ВЗАИМНАЯ СИМПАТИЯ! 💕\n\nСсылка на страницу: vk.com/id${firstLikerId}\n\nМожешь написать человеку в личные сообщения!`);
+                
                 await vk.api.messages.send({
                     user_id: firstLikerId,
                     message: `💕 ВЗАИМНАЯ СИМПАТИЯ! 💕\n\nСсылка на страницу: vk.com/id${userId}\n\nМожешь написать человеку в личные сообщения!`,
                     random_id: Math.floor(Math.random() * 1000000000)
                 });
+                
                 await db.createMatch(currentUser.id, firstLiker.id, 'public');
             } else {
                 const matchId = await db.createMatch(currentUser.id, firstLiker.id, 'anon');
@@ -403,6 +411,7 @@ async function handleMessage(context) {
                 });
             }
         } else {
+            console.log('Мэтча нет, ожидаем ответа');
             await context.send(`✅ Ты поставил(а) взаимный лайк! Как только пользователь ответит - будет мэтч.`);
         }
         return;
