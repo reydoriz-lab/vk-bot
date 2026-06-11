@@ -5,7 +5,9 @@ const FormData = require('form-data');
 const config = require('../config');
 const keyboards = require('../keyboards');
 
-const userStates = new Map();
+// Разные хранилища для разных процессов
+const editStates = new Map();      // для редактирования
+const deleteStates = new Map();     // для удаления
 
 // Состояния для редактирования анкеты
 const EditSteps = {
@@ -196,12 +198,6 @@ async function handleMyProfile(context, vk) {
 async function handleEditProfile(context, vk) {
     const userId = context.senderId;
     
-    // ОЧИЩАЕМ СОСТОЯНИЕ УДАЛЕНИЯ, ЕСЛИ ОНО БЫЛО
-    const state = userStates.get(userId);
-    if (state && state.step === 'delete_choose_type') {
-        userStates.delete(userId);
-    }
-    
     const user = await db.getUserByVkId(userId);
     
     if (!user) {
@@ -228,14 +224,14 @@ async function handleEditProfile(context, vk) {
         });
         return { action: 'waiting_edit_choice' };
     } else if (publicProfile) {
-        userStates.set(userId, {
+        editStates.set(userId, {
             step: EditSteps.CHOOSE_FIELD,
             editType: 'public',
             profile: publicProfile
         });
         await showEditFieldMenu(context, 'public');
     } else if (anonProfile) {
-        userStates.set(userId, {
+        editStates.set(userId, {
             step: EditSteps.CHOOSE_FIELD,
             editType: 'anon',
             profile: anonProfile
@@ -267,7 +263,7 @@ async function showEditFieldMenu(context, type) {
 
 async function handleEditFieldChoice(context, vk, text) {
     const userId = context.senderId;
-    const state = userStates.get(userId);
+    const state = editStates.get(userId);
     
     if (!state || state.step !== EditSteps.CHOOSE_FIELD) return false;
     
@@ -276,7 +272,7 @@ async function handleEditFieldChoice(context, vk, text) {
     switch (text) {
         case '📝 Имя':
             state.step = EditSteps.EDIT_NAME;
-            userStates.set(userId, state);
+            editStates.set(userId, state);
             await context.send('📝 Введи новое имя (от 2 до 50 символов):', {
                 keyboard: JSON.stringify({ buttons: [] })
             });
@@ -284,25 +280,25 @@ async function handleEditFieldChoice(context, vk, text) {
             
         case '🎂 Возраст':
             state.step = EditSteps.EDIT_AGE;
-            userStates.set(userId, state);
+            editStates.set(userId, state);
             await context.send('🎂 Введи новый возраст (от 18 лет):');
             return { action: 'edit_age' };
             
         case '🏙 Город':
             state.step = EditSteps.EDIT_CITY;
-            userStates.set(userId, state);
+            editStates.set(userId, state);
             await context.send('🏙 Введи новый город:');
             return { action: 'edit_city' };
             
         case '📸 Фото':
             state.step = EditSteps.EDIT_PHOTO;
-            userStates.set(userId, state);
+            editStates.set(userId, state);
             await context.send('📸 Отправь новое фото для анкеты:');
             return { action: 'edit_photo' };
             
         case '👤 Мой пол':
             state.step = EditSteps.EDIT_GENDER;
-            userStates.set(userId, state);
+            editStates.set(userId, state);
             await context.send('👤 Укажи свой пол:', {
                 keyboard: JSON.stringify({
                     one_time: true,
@@ -316,7 +312,7 @@ async function handleEditFieldChoice(context, vk, text) {
             
         case '🔍 Кого ищу':
             state.step = EditSteps.EDIT_SEARCH_GENDER;
-            userStates.set(userId, state);
+            editStates.set(userId, state);
             await context.send('🔍 Кого ты хочешь искать?', {
                 keyboard: JSON.stringify({
                     one_time: true,
@@ -330,7 +326,7 @@ async function handleEditFieldChoice(context, vk, text) {
             return { action: 'edit_search_gender' };
             
         case '🔙 Назад':
-            userStates.delete(userId);
+            editStates.delete(userId);
             await handleMyProfile(context, vk);
             return { action: 'back' };
             
@@ -341,7 +337,7 @@ async function handleEditFieldChoice(context, vk, text) {
 
 async function handleEditName(context, vk, text) {
     const userId = context.senderId;
-    const state = userStates.get(userId);
+    const state = editStates.get(userId);
     
     if (!state || state.step !== EditSteps.EDIT_NAME) return false;
     
@@ -355,7 +351,7 @@ async function handleEditName(context, vk, text) {
     
     if (!profile) {
         await context.send('❌ Анкета не найдена');
-        userStates.delete(userId);
+        editStates.delete(userId);
         return { action: 'error' };
     }
     
@@ -364,7 +360,7 @@ async function handleEditName(context, vk, text) {
     
     await context.send(`✅ Имя успешно изменено на "${text.trim()}"!`);
     
-    userStates.delete(userId);
+    editStates.delete(userId);
     await handleMyProfile(context, vk);
     
     return { action: 'name_updated' };
@@ -372,7 +368,7 @@ async function handleEditName(context, vk, text) {
 
 async function handleEditAge(context, vk, text) {
     const userId = context.senderId;
-    const state = userStates.get(userId);
+    const state = editStates.get(userId);
     
     if (!state || state.step !== EditSteps.EDIT_AGE) return false;
     
@@ -386,7 +382,7 @@ async function handleEditAge(context, vk, text) {
     
     if (!profile) {
         await context.send('❌ Анкета не найдена');
-        userStates.delete(userId);
+        editStates.delete(userId);
         return { action: 'error' };
     }
     
@@ -395,7 +391,7 @@ async function handleEditAge(context, vk, text) {
     
     await context.send(`✅ Возраст успешно изменён на ${text} лет!`);
     
-    userStates.delete(userId);
+    editStates.delete(userId);
     await handleMyProfile(context, vk);
     
     return { action: 'age_updated' };
@@ -403,7 +399,7 @@ async function handleEditAge(context, vk, text) {
 
 async function handleEditCity(context, vk, text) {
     const userId = context.senderId;
-    const state = userStates.get(userId);
+    const state = editStates.get(userId);
     
     if (!state || state.step !== EditSteps.EDIT_CITY) return false;
     
@@ -426,7 +422,7 @@ async function handleEditCity(context, vk, text) {
     
     if (!profile) {
         await context.send('❌ Анкета не найдена');
-        userStates.delete(userId);
+        editStates.delete(userId);
         return { action: 'error' };
     }
     
@@ -435,7 +431,7 @@ async function handleEditCity(context, vk, text) {
     
     await context.send(`✅ Город успешно изменён на "${normalizedCity}"!`);
     
-    userStates.delete(userId);
+    editStates.delete(userId);
     await handleMyProfile(context, vk);
     
     return { action: 'city_updated' };
@@ -443,7 +439,7 @@ async function handleEditCity(context, vk, text) {
 
 async function handleEditPhoto(context, vk) {
     const userId = context.senderId;
-    const state = userStates.get(userId);
+    const state = editStates.get(userId);
     
     if (!state || state.step !== EditSteps.EDIT_PHOTO) return false;
     
@@ -516,7 +512,7 @@ async function handleEditPhoto(context, vk) {
     
     if (!profile) {
         await context.send('❌ Анкета не найдена');
-        userStates.delete(userId);
+        editStates.delete(userId);
         return { action: 'error' };
     }
     
@@ -525,7 +521,7 @@ async function handleEditPhoto(context, vk) {
     
     await context.send(`✅ Фото успешно обновлено!`);
     
-    userStates.delete(userId);
+    editStates.delete(userId);
     await handleMyProfile(context, vk);
     
     return { action: 'photo_updated' };
@@ -533,7 +529,7 @@ async function handleEditPhoto(context, vk) {
 
 async function handleEditGender(context, vk, text) {
     const userId = context.senderId;
-    const state = userStates.get(userId);
+    const state = editStates.get(userId);
     
     if (!state || state.step !== EditSteps.EDIT_GENDER) return false;
     
@@ -547,7 +543,7 @@ async function handleEditGender(context, vk, text) {
     
     if (!profile) {
         await context.send('❌ Анкета не найдена');
-        userStates.delete(userId);
+        editStates.delete(userId);
         return { action: 'error' };
     }
     
@@ -556,7 +552,7 @@ async function handleEditGender(context, vk, text) {
     
     await context.send(`✅ Пол успешно изменён!`);
     
-    userStates.delete(userId);
+    editStates.delete(userId);
     await handleMyProfile(context, vk);
     
     return { action: 'gender_updated' };
@@ -564,7 +560,7 @@ async function handleEditGender(context, vk, text) {
 
 async function handleEditSearchGender(context, vk, text) {
     const userId = context.senderId;
-    const state = userStates.get(userId);
+    const state = editStates.get(userId);
     
     if (!state || state.step !== EditSteps.EDIT_SEARCH_GENDER) return false;
     
@@ -579,7 +575,7 @@ async function handleEditSearchGender(context, vk, text) {
     
     if (!profile) {
         await context.send('❌ Анкета не найдена');
-        userStates.delete(userId);
+        editStates.delete(userId);
         return { action: 'error' };
     }
     
@@ -588,7 +584,7 @@ async function handleEditSearchGender(context, vk, text) {
     
     await context.send(`✅ Настройки поиска успешно изменены!`);
     
-    userStates.delete(userId);
+    editStates.delete(userId);
     await handleMyProfile(context, vk);
     
     return { action: 'search_gender_updated' };
@@ -601,7 +597,7 @@ async function handleEditChoice(context, vk, text) {
     
     if (text === '📋 Обычную анкету') {
         console.log('Выбрана обычная анкета');
-        userStates.set(userId, {
+        editStates.set(userId, {
             step: EditSteps.CHOOSE_FIELD,
             editType: 'public'
         });
@@ -611,7 +607,7 @@ async function handleEditChoice(context, vk, text) {
     
     if (text === '🔞 Анонимную анкету') {
         console.log('Выбрана анонимная анкета');
-        userStates.set(userId, {
+        editStates.set(userId, {
             step: EditSteps.CHOOSE_FIELD,
             editType: 'anon'
         });
@@ -625,12 +621,6 @@ async function handleEditChoice(context, vk, text) {
 async function handleDeleteProfile(context, vk, profileType = null) {
     const userId = context.senderId;
     console.log(`🗑 DELETE PROFILE CALLED: userId=${userId}, profileType=${profileType}`);
-    
-    // ОЧИЩАЕМ СОСТОЯНИЕ РЕДАКТИРОВАНИЯ, ЕСЛИ ОНО БЫЛО
-    const editState = userStates.get(userId);
-    if (editState && editState.step === EditSteps.CHOOSE_FIELD) {
-        userStates.delete(userId);
-    }
     
     const user = await db.getUserByVkId(userId);
     
@@ -647,13 +637,13 @@ async function handleDeleteProfile(context, vk, profileType = null) {
         console.log(`📊 Профили: public=${!!publicProfile}, anon=${!!anonProfile}`);
         
         if (publicProfile && anonProfile) {
-            // Устанавливаем состояние, что мы в режиме выбора типа для удаления
-            userStates.set(userId, { step: 'delete_choose_type' });
+            // Устанавливаем состояние для удаления
+            deleteStates.set(userId, { step: 'delete_choose_type' });
             
             const deleteKeyboard = JSON.stringify({
                 one_time: true,
                 buttons: [
-                    [{ action: { type: "text", label: "📋 Обычную анкету" }, color: "primary" }],
+                    [{ action: { type: "text", label: "🗑 Обычную анкету" }, color: "primary" }],
                     [{ action: { type: "text", label: "🔞 Анонимную анкету" }, color: "primary" }],
                     [{ action: { type: "text", label: "🔙 Назад" }, color: "secondary" }]
                 ]
@@ -674,8 +664,7 @@ async function handleDeleteProfile(context, vk, profileType = null) {
             await context.send('❌ У тебя нет анкет для удаления', { keyboard: getMainKeyboard(userId) });
         }
         
-        // Очищаем состояние удаления
-        userStates.delete(userId);
+        deleteStates.delete(userId);
         return { action: 'deleted' };
     }
     
@@ -689,8 +678,7 @@ async function handleDeleteProfile(context, vk, profileType = null) {
         await context.send('❌ Анкета не найдена', { keyboard: getMainKeyboard(userId) });
     }
     
-    // Очищаем состояние после удаления
-    userStates.delete(userId);
+    deleteStates.delete(userId);
     
     return { action: 'deleted' };
 }
@@ -717,6 +705,7 @@ module.exports = {
     handleEditSearchGender,
     handleDeleteProfile,
     handleEditChoice,
-    userStates,
+    editStates,      // экспортируем editStates
+    deleteStates,    // экспортируем deleteStates
     EditSteps
 };

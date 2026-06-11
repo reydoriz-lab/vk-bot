@@ -76,41 +76,40 @@ async function handleMessage(context) {
         return;
     }
     
-    // ========== СНАЧАЛА ПРОВЕРЯЕМ СОСТОЯНИЯ СОЗДАНИЯ АНКЕТЫ ==========
-    const profileState = startHandler.userStates.get(userId);
-    const editState = startHandler.userStates.get(userId);
+    // ========== СНАЧАЛА ПРОВЕРЯЕМ СОСТОЯНИЯ СОЗДАНИЯ АНКЕТЫ (profile.js) ==========
+    const createState = startHandler.userStates.get(userId);
     
-    if (profileState && profileState.step === profileHandler.ProfileSteps.CHOOSE_GENDER) {
+    if (createState && createState.step === profileHandler.ProfileSteps.CHOOSE_GENDER) {
         console.log(`🎯 [ОБРАБОТКА] CHOOSE_GENDER, текст: ${text}`);
         const result = await profileHandler.handleGenderChoice(context, vk, text);
         if (result) return;
     }
     
-    if (profileState && profileState.step === profileHandler.ProfileSteps.CHOOSE_SEARCH_GENDER) {
+    if (createState && createState.step === profileHandler.ProfileSteps.CHOOSE_SEARCH_GENDER) {
         console.log(`🎯 [ОБРАБОТКА] CHOOSE_SEARCH_GENDER, текст: ${text}`);
         const result = await profileHandler.handleSearchGenderChoice(context, vk, text);
         if (result) return;
     }
     
-    if (profileState && profileState.step === profileHandler.ProfileSteps.ENTER_NAME) {
+    if (createState && createState.step === profileHandler.ProfileSteps.ENTER_NAME) {
         console.log(`🎯 [ОБРАБОТКА] ENTER_NAME, текст: ${text}`);
         const result = await profileHandler.handleNameInput(context, vk, text);
         if (result) return;
     }
     
-    if (profileState && profileState.step === profileHandler.ProfileSteps.ENTER_AGE) {
+    if (createState && createState.step === profileHandler.ProfileSteps.ENTER_AGE) {
         console.log(`🎯 [ОБРАБОТКА] ENTER_AGE, текст: ${text}`);
         const result = await profileHandler.handleAgeInput(context, vk, text);
         if (result) return;
     }
     
-    if (profileState && profileState.step === profileHandler.ProfileSteps.ENTER_CITY) {
+    if (createState && createState.step === profileHandler.ProfileSteps.ENTER_CITY) {
         console.log(`🎯 [ОБРАБОТКА] ENTER_CITY, текст: ${text}`);
         const result = await profileHandler.handleCityInput(context, vk, text);
         if (result) return;
     }
     
-    if (profileState && profileState.step === profileHandler.ProfileSteps.UPLOAD_PHOTO) {
+    if (createState && createState.step === profileHandler.ProfileSteps.UPLOAD_PHOTO) {
         console.log(`🎯 [ОБРАБОТКА] UPLOAD_PHOTO`);
         if (context.attachments && context.attachments.length > 0) {
             const result = await profileHandler.handlePhotoUpload(context, vk);
@@ -121,12 +120,62 @@ async function handleMessage(context) {
         }
     }
     
+    // ========== ПРОВЕРЯЕМ СОСТОЯНИЯ РЕДАКТИРОВАНИЯ (editStates) ==========
+    const editState = startHandler.editStates.get(userId);
+    
+    if (editState && editState.step === startHandler.EditSteps.CHOOSE_FIELD) {
+        console.log(`🎯 [РЕДАКТИРОВАНИЕ] CHOOSE_FIELD, текст: ${text}`);
+        const result = await startHandler.handleEditFieldChoice(context, vk, text);
+        if (result) return;
+    }
+    
+    if (editState && editState.step === startHandler.EditSteps.EDIT_NAME) {
+        console.log(`🎯 [РЕДАКТИРОВАНИЕ] EDIT_NAME, текст: ${text}`);
+        const result = await startHandler.handleEditName(context, vk, text);
+        if (result) return;
+    }
+    
+    if (editState && editState.step === startHandler.EditSteps.EDIT_AGE) {
+        console.log(`🎯 [РЕДАКТИРОВАНИЕ] EDIT_AGE, текст: ${text}`);
+        const result = await startHandler.handleEditAge(context, vk, text);
+        if (result) return;
+    }
+    
+    if (editState && editState.step === startHandler.EditSteps.EDIT_CITY) {
+        console.log(`🎯 [РЕДАКТИРОВАНИЕ] EDIT_CITY, текст: ${text}`);
+        const result = await startHandler.handleEditCity(context, vk, text);
+        if (result) return;
+    }
+    
+    if (editState && editState.step === startHandler.EditSteps.EDIT_PHOTO) {
+        console.log(`🎯 [РЕДАКТИРОВАНИЕ] EDIT_PHOTO`);
+        if (context.attachments && context.attachments.length > 0) {
+            const result = await startHandler.handleEditPhoto(context, vk);
+            if (result) return;
+        } else {
+            await context.send('📸 Пожалуйста, отправь фото.');
+            return;
+        }
+    }
+    
+    if (editState && editState.step === startHandler.EditSteps.EDIT_GENDER) {
+        console.log(`🎯 [РЕДАКТИРОВАНИЕ] EDIT_GENDER, текст: ${text}`);
+        const result = await startHandler.handleEditGender(context, vk, text);
+        if (result) return;
+    }
+    
+    if (editState && editState.step === startHandler.EditSteps.EDIT_SEARCH_GENDER) {
+        console.log(`🎯 [РЕДАКТИРОВАНИЕ] EDIT_SEARCH_GENDER, текст: ${text}`);
+        const result = await startHandler.handleEditSearchGender(context, vk, text);
+        if (result) return;
+    }
+    
     // ========== ОБРАБАТЫВАЕМ КНОПКИ ВЫБОРА ТИПА АНКЕТЫ ==========
     if (text === '📋 Обычная анкета' || text === '🔞 Анонимная анкета') {
         console.log(`🎯 [ОБРАБОТКА] Кнопка выбора типа: ${text}`);
         
-        // Проверяем, в каком мы режиме (удаление или редактирование)
-        const deleteState = startHandler.userStates.get(userId);
+        // Проверяем режим удаления
+        const deleteState = startHandler.deleteStates.get(userId);
         
         // Если состояние ожидания выбора типа для удаления
         if (deleteState && deleteState.step === 'delete_choose_type') {
@@ -135,17 +184,17 @@ async function handleMessage(context) {
             return;
         }
         
-        // Иначе проверяем создание или редактирование
-        const profileStateCheck = startHandler.userStates.get(userId);
-        if (profileStateCheck && profileStateCheck.step === profileHandler.ProfileSteps.CHOOSE_TYPE) {
+        // Проверяем режим создания
+        if (createState && createState.step === profileHandler.ProfileSteps.CHOOSE_TYPE) {
             console.log(`✅ [СОЗДАНИЕ] Передаём в profileHandler.handleProfileTypeChoice`);
             const result = await profileHandler.handleProfileTypeChoice(context, vk, text);
             if (result) return;
-        } else {
-            console.log(`✏️ [РЕДАКТИРОВАНИЕ] Передаём в startHandler.handleEditChoice`);
-            const result = await startHandler.handleEditChoice(context, vk, text);
-            if (result) return;
         }
+        
+        // Если не удаление и не создание — значит редактирование
+        console.log(`✏️ [РЕДАКТИРОВАНИЕ] Передаём в startHandler.handleEditChoice`);
+        const result = await startHandler.handleEditChoice(context, vk, text);
+        if (result) return;
     }
     
     // ========== ОБРАБОТКА АДМИН-ПАНЕЛИ ==========
@@ -247,47 +296,6 @@ async function handleMessage(context) {
     if (text === '🔞 Анонимную анкету') {
         await startHandler.handleDeleteProfile(context, vk, 'anon');
         return;
-    }
-    
-    // ========== ОБРАБОТКА СОСТОЯНИЙ РЕДАКТИРОВАНИЯ ==========
-    if (editState && editState.step === startHandler.EditSteps?.CHOOSE_FIELD) {
-        const result = await startHandler.handleEditFieldChoice(context, vk, text);
-        if (result) return;
-    }
-    
-    if (editState && editState.step === startHandler.EditSteps?.EDIT_NAME) {
-        const result = await startHandler.handleEditName(context, vk, text);
-        if (result) return;
-    }
-    
-    if (editState && editState.step === startHandler.EditSteps?.EDIT_AGE) {
-        const result = await startHandler.handleEditAge(context, vk, text);
-        if (result) return;
-    }
-    
-    if (editState && editState.step === startHandler.EditSteps?.EDIT_CITY) {
-        const result = await startHandler.handleEditCity(context, vk, text);
-        if (result) return;
-    }
-    
-    if (editState && editState.step === startHandler.EditSteps?.EDIT_PHOTO) {
-        if (context.attachments && context.attachments.length > 0) {
-            const result = await startHandler.handleEditPhoto(context, vk);
-            if (result) return;
-        } else {
-            await context.send('📸 Пожалуйста, отправь фото.');
-            return;
-        }
-    }
-    
-    if (editState && editState.step === startHandler.EditSteps?.EDIT_GENDER) {
-        const result = await startHandler.handleEditGender(context, vk, text);
-        if (result) return;
-    }
-    
-    if (editState && editState.step === startHandler.EditSteps?.EDIT_SEARCH_GENDER) {
-        const result = await startHandler.handleEditSearchGender(context, vk, text);
-        if (result) return;
     }
     
     // ========== ОБРАБОТКА ВЗАИМНОГО ЛАЙКА ==========
