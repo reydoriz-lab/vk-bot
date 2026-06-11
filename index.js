@@ -1,3 +1,15 @@
+async function startBot() {
+    // Принудительный сброс sequences при запуске
+    try {
+        await pool.query(`SELECT setval('chat_messages_id_seq', (SELECT COALESCE(MAX(id), 1) FROM chat_messages))`);
+        console.log('✅ Sequence chat_messages сброшен');
+    } catch (err) {
+        console.log('Ошибка сброса sequence:', err.message);
+    }
+    
+    // ... остальной код
+}
+
 const { VK } = require('vk-io');
 const express = require('express');
 const config = require('./config');
